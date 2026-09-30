@@ -1,0 +1,78 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --irctc-blue: #213d77;
+  --irctc-blue-dark: #172b54;
+  --irctc-orange: #fb792b;
+  --irctc-bg: #f4f6fa;
+}
+
+body {
+  background-color: #f4f6fa;
+  color: #1e293b;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Custom crisp scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #eef2f8;
+}
+::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+/* IRCTC Card Base */
+.irctc-card {
+  background: #ffffff;
+  border: 1px solid #d8e2ed;
+  border-radius: 10px;
+  box-shadow: 0 1px 4px rgba(33, 61, 119, 0.05);
+}
+
+/* Form Controls consistent styling */
+.irctc-input {
+  background: #ffffff;
+  border: 1.5px solid #cbd5e1;
+  color: #0f172a;
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  transition: all 0.15s ease-in-out;
+}
+.irctc-input:focus {
+  outline: none;
+  border-color: #213d77;
+  box-shadow: 0 0 0 3px rgba(33, 61, 119, 0.15);
+}
+
+.irctc-select {
+  background-color: #ffffff;
+  border: 1.5px solid #cbd5e1;
+  color: #0f172a;
+  border-radius: 6px;
+  padding: 0.5rem 2rem 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all 0.15s ease-in-out;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23475569' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+  background-position: right 0.5rem center;
+  background-repeat: no-repeat;
+  background-size: 1.25em 1.25em;
+}
+.irctc-select:focus {
+  outline: none;
+  border-color: #213d77;
+  box-shadow: 0 0 0 3px rgba(33, 61, 119, 0.15);
+}

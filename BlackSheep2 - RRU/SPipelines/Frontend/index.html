@@ -1,0 +1,1902 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Indian Railways Compound Delay &amp; Segment Engine</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-body: #f8fafc;
+      --bg-surface: #ffffff;
+      --border-subtle: #e2e8f0;
+      --border-strong: #cbd5e1;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --primary: #1e3a8a;
+      --primary-hover: #1e40af;
+      --accent-blue: #2563eb;
+      --accent-blue-subtle: #eff6ff;
+      --color-green: #059669;
+      --color-green-bg: #ecfdf5;
+      --color-green-border: #a7f3d0;
+      --color-red: #dc2626;
+      --color-red-bg: #fef2f2;
+      --color-red-border: #fecaca;
+      --color-amber: #d97706;
+      --color-amber-bg: #fffbeb;
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-body);
+      color: var(--text-main);
+      font-family: var(--font-sans);
+      line-height: 1.5;
+      padding: 24px 16px 64px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .container {
+      max-width: 1140px;
+      margin: 0 auto;
+    }
+
+    /* Top Navigation Header */
+    .top-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 16px 24px;
+      margin-bottom: 24px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .brand-logo {
+      background: var(--primary);
+      color: #fff;
+      font-family: var(--font-mono);
+      font-weight: 800;
+      font-size: 14px;
+      padding: 8px 12px;
+      border-radius: 8px;
+      letter-spacing: 1px;
+    }
+
+    .brand-text h1 {
+      font-size: 18px;
+      font-weight: 800;
+      color: var(--text-main);
+      letter-spacing: -0.3px;
+    }
+
+    .brand-text p {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .btn-compound-cta {
+      background: var(--primary);
+      color: #ffffff;
+      border: none;
+      font-family: var(--font-sans);
+      font-size: 13px;
+      font-weight: 700;
+      padding: 9px 18px;
+      border-radius: 8px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: background 0.15s, transform 0.1s;
+    }
+
+    .btn-compound-cta:hover {
+      background: var(--primary-hover);
+      transform: translateY(-1px);
+    }
+
+    .status-badge-win {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      padding: 6px 12px;
+      background: var(--color-green-bg);
+      color: var(--color-green);
+      border: 1px solid var(--color-green-border);
+      border-radius: 6px;
+    }
+
+    /* Main Card Layout */
+    .card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+    }
+
+    .card-title-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 18px;
+      border-bottom: 1px solid var(--border-subtle);
+      padding-bottom: 12px;
+    }
+
+    .card-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .section-label {
+      font-size: 11px;
+      font-family: var(--font-mono);
+      text-transform: uppercase;
+      font-weight: 700;
+      color: var(--accent-blue);
+      background: var(--accent-blue-subtle);
+      padding: 3px 8px;
+      border-radius: 4px;
+    }
+
+    /* Fieldset Grid */
+    .fieldset-box {
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      padding: 16px 18px;
+      margin-bottom: 20px;
+      background: #fafcff;
+    }
+
+    .fieldset-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--primary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .grid-cases-3 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 14px;
+    }
+
+    .input-item {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .input-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: #334155;
+    }
+
+    .select-control, .text-control {
+      width: 100%;
+      padding: 8px 12px;
+      font-size: 13px;
+      font-family: var(--font-sans);
+      border: 1px solid var(--border-strong);
+      border-radius: 6px;
+      background: #ffffff;
+      color: var(--text-main);
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+
+    .select-control:focus, .text-control:focus {
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+    }
+
+    /* Search & Quick Chips */
+    .search-row {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+    }
+
+    .search-input-wrapper {
+      flex: 1;
+      min-width: 280px;
+      position: relative;
+    }
+
+    .search-dropdown {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: #ffffff;
+      border: 1px solid var(--border-strong);
+      border-radius: 8px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.12);
+      z-index: 100;
+      max-height: 280px;
+      overflow-y: auto;
+      margin-top: 4px;
+    }
+
+    .search-item {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border-subtle);
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      transition: background 0.12s;
+    }
+
+    .search-item:hover {
+      background: var(--accent-blue-subtle);
+    }
+
+    .search-item:last-child {
+      border-bottom: none;
+    }
+
+    /* Auto-Pickup Banner */
+    .auto-pickup-banner {
+      background: #ecfdf5;
+      border: 1px solid #a7f3d0;
+      border-radius: 8px;
+      padding: 10px 16px;
+      margin-bottom: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .auto-pill {
+      background: #059669;
+      color: #ffffff;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-weight: 700;
+      font-size: 10px;
+      letter-spacing: 0.5px;
+      margin-right: 8px;
+      font-family: var(--font-mono);
+      display: inline-block;
+    }
+
+    .chips-container {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+      align-items: center;
+    }
+
+
+    .chip-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .chip-btn {
+      background: #ffffff;
+      border: 1px solid var(--border-strong);
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      color: #334155;
+      cursor: pointer;
+      transition: all 0.12s;
+    }
+
+    .chip-btn:hover {
+      background: var(--accent-blue-subtle);
+      border-color: var(--accent-blue);
+      color: var(--accent-blue);
+    }
+
+    .chip-btn.active {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #ffffff;
+      font-weight: 600;
+    }
+
+    /* Action Toolbar */
+    .action-toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 20px;
+      border-top: 1px solid var(--border-subtle);
+      padding-top: 16px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .btn-calculate {
+      background: var(--primary);
+      color: #ffffff;
+      border: none;
+      font-size: 14px;
+      font-weight: 700;
+      padding: 10px 24px;
+      border-radius: 8px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: background 0.15s;
+    }
+
+    .btn-calculate:hover {
+      background: var(--primary-hover);
+    }
+
+    .btn-reset {
+      background: #ffffff;
+      border: 1px solid var(--border-strong);
+      color: #475569;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 9px 18px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .btn-reset:hover {
+      background: #f1f5f9;
+    }
+
+    /* KPI Highlights Grid */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .kpi-card {
+      background: #ffffff;
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      padding: 14px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .kpi-header {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+    }
+
+    .kpi-value {
+      font-size: 20px;
+      font-weight: 800;
+      color: var(--text-main);
+      font-family: var(--font-mono);
+    }
+
+    .kpi-subtext {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    /* Status Pill */
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-weight: 700;
+      font-size: 13px;
+      letter-spacing: 0.3px;
+    }
+
+    .status-badge.on-time {
+      background: var(--color-green-bg);
+      color: var(--color-green);
+      border: 1px solid var(--color-green-border);
+    }
+
+    .status-badge.late {
+      background: var(--color-red-bg);
+      color: var(--color-red);
+      border: 1px solid var(--color-red-border);
+    }
+
+    /* Tables */
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 16px;
+      font-size: 13px;
+    }
+
+    .data-table th, .data-table td {
+      padding: 10px 14px;
+      border: 1px solid var(--border-subtle);
+      text-align: left;
+    }
+
+    .data-table th {
+      background: #f8fafc;
+      font-weight: 600;
+      color: #334155;
+    }
+
+    .data-table tr.total-row {
+      background: #f8fafc;
+      font-weight: 700;
+    }
+
+    .data-table tr.eta-row {
+      background: var(--accent-blue-subtle);
+      font-weight: 800;
+      color: var(--primary);
+      font-size: 14px;
+    }
+
+    .mono {
+      font-family: var(--font-mono);
+    }
+
+    .text-red { color: var(--color-red); font-weight: 600; }
+    .text-green { color: var(--color-green); font-weight: 600; }
+
+    /* Segment Detail Callout */
+    .segment-banner {
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin-bottom: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .segment-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: #1e40af;
+      font-family: var(--font-mono);
+    }
+
+    .segment-desc {
+      font-size: 12px;
+      color: #3b82f6;
+      margin-top: 2px;
+    }
+
+    .border-tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      background: #e2e8f0;
+      color: #334155;
+    }
+
+    .border-tag.crossing {
+      background: #fef3c7;
+      color: #92400e;
+      border: 1px solid #fde68a;
+    }
+
+    .border-tag.intra {
+      background: #dcfce7;
+      color: #166534;
+      border: 1px solid #bbf7d0;
+    }
+
+    /* Explanation Callout */
+    .callout {
+      background: #f8fafc;
+      border-left: 4px solid var(--accent-blue);
+      padding: 14px 18px;
+      border-radius: 6px;
+      font-size: 13px;
+      color: #334155;
+      line-height: 1.6;
+    }
+
+    /* Footer */
+    .footer {
+      text-align: center;
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 36px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    
+    <!-- Top Header -->
+    <header class="top-header">
+      <div class="brand">
+        <div class="brand-logo">IR-WIN</div>
+        <div class="brand-text">
+          <h1>Indian Railways &bull; Compound Delay &amp; Segment Engine</h1>
+          <p>Database WIN &bull; All Operational Cases &amp; Corridor Segmentations</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <span class="status-badge-win">DATABASE: WIN CONNECTED</span>
+        <button type="button" id="btnTopCompoundEta" class="btn-compound-cta">
+          &star; Compute Compound ETA
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Controls Card -->
+    <section class="card">
+      <div class="card-title-row">
+        <div class="card-title">
+          <span class="section-label">INPUT CONTROLLER</span>
+          <span>Individual Input Across All Cases from the Table</span>
+        </div>
+        <div>
+          <button type="button" id="btnResetAll" class="btn-reset" style="padding:4px 12px; font-size:11px;">
+            Reset to Ideal Baseline
+          </button>
+        </div>
+      </div>
+
+      <!-- Train Search & Presets with Auto-Pickup -->
+      <div class="search-row">
+        <div class="search-input-wrapper">
+          <label for="trainSearchInput" class="input-label">
+            Search Train (Auto-picks up Tier, Relevant Corridor, Schedule, Distance &amp; Segments):
+          </label>
+          <div style="position:relative;">
+            <input 
+              type="text" 
+              id="trainSearchInput" 
+              class="text-control" 
+              placeholder="e.g. 12001, 12952, 12951, 12301, 12626, 12841, Shatabdi, Rajdhani, Delhi to Mumbai..."
+              value="12001"
+              autocomplete="off"
+            >
+            <div id="searchSuggestions" class="search-dropdown" style="display:none;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Auto-Pickup Status Banner -->
+      <div id="autoPickupBanner" class="auto-pickup-banner">
+        <div>
+          <span class="auto-pill">&star; AUTO-PICKUP ACTIVE</span>
+          <span id="autoPickupDetails">
+            Train <strong>12001</strong> &bull; Tier: <strong>T1_PREMIUM</strong> &bull; Corridor: <strong>DEL-MAS</strong> (Delhi ↔ Chennai Grand Trunk) &bull; EA Slack: <strong>90.0m</strong> &bull; 10 Hops Mapped
+          </span>
+        </div>
+        <div style="font-size:11px; font-weight:700; color:#065f46;" id="autoPickupSyncStatus">
+          Synced with Master Timetable &amp; Database WIN
+        </div>
+      </div>
+
+      <div class="chips-container" style="margin-bottom:18px;">
+        <span class="chip-label">Quick Train Presets:</span>
+        <button type="button" class="chip-btn active" data-train="12001">12001 Shatabdi (T1 &bull; DEL-MAS)</button>
+        <button type="button" class="chip-btn" data-train="12952">12952 Tejas Raj (T1 &bull; DEL-MUM)</button>
+        <button type="button" class="chip-btn" data-train="12951">12951 Mumbai Raj (T1 &bull; DEL-MUM Rev)</button>
+        <button type="button" class="chip-btn" data-train="12302">12302 Howrah Raj (T1 &bull; DEL-HWH)</button>
+        <button type="button" class="chip-btn" data-train="12626">12626 Kerala Exp (T2 &bull; DEL-MAS)</button>
+        <button type="button" class="chip-btn" data-train="12841">12841 Coromandel (T2 &bull; HWH-MAS)</button>
+        <button type="button" class="chip-btn" data-train="12215">12215 Garib Rath (T2 &bull; DEL-MUM)</button>
+        <button type="button" class="chip-btn" data-train="19019">19019 Dehradun Exp (T3 &bull; Mail)</button>
+      </div>
+
+
+      <!-- FIELDSET 1: ALL 10 OPERATIONAL CASES FROM MASTER PNC TABLE -->
+      <div class="fieldset-box">
+        <div class="fieldset-title">
+          <span>&bull;</span> 1. Operational Disturbance Cases (All 10 Master PnC Attributes)
+        </div>
+        
+        <div class="grid-cases-3">
+          <!-- 1. Train Tier (Auto-Fetched & Frozen) -->
+          <div class="input-item">
+            <label for="caseTier" class="input-label" style="display:flex; justify-content:space-between; align-items:center;">
+              <span>1. Train Tier (Priority):</span>
+              <span class="border-tag" id="badgeTierFrozen" style="background:#e0e7ff; color:#3730a3; font-size:10px; font-weight:700;">&#128274; AUTO-FETCHED &amp; FROZEN</span>
+            </label>
+            <select id="caseTier" class="select-control" disabled style="background:#f1f5f9; cursor:not-allowed; font-weight:600; color:#1e293b;">
+              <option value="T1_PREMIUM" selected>T1_PREMIUM (Rajdhani / Shatabdi / Tejas)</option>
+              <option value="T2_SUPERFAST">T2_SUPERFAST (Superfast Express)</option>
+              <option value="T3_EXPRESS">T3_EXPRESS (Mail / Express Passenger)</option>
+              <option value="T3_EXPRESS_PASSENGER">T3_EXPRESS_PASSENGER (Mail / Express)</option>
+            </select>
+          </div>
+
+          <!-- 2. Weather Condition -->
+          <div class="input-item">
+            <label for="caseWeather" class="input-label">2. Weather Case (DW):</label>
+            <select id="caseWeather" class="select-control">
+              <option value="Clear" selected>Clear (Nominal - +0.0 min)</option>
+              <option value="Fog">Fog (Dense Crawl - +35.0 mins)</option>
+              <option value="Heavy_Rain">Heavy Rain (Monsoon - +12.0 mins)</option>
+              <option value="Thunderstorm">Thunderstorm (Storm Caution - +18.0 mins)</option>
+              <option value="Snow">Snowfall (Sub-zero Freeze - +22.0 mins)</option>
+            </select>
+          </div>
+
+          <!-- 3. TSR Level -->
+          <div class="input-item">
+            <label for="caseTsr" class="input-label">3. Speed Restriction / TSR Case (DTS):</label>
+            <select id="caseTsr" class="select-control">
+              <option value="None" selected>None (Full Permissible Speed - +0.0 min)</option>
+              <option value="Minor">Minor (1-2 Caution Orders - +8.0 mins)</option>
+              <option value="Major">Major (Heavy Engineering Block - +24.0 mins)</option>
+            </select>
+          </div>
+
+          <!-- 4. Priority Congestion -->
+          <div class="input-item">
+            <label for="caseCongestion" class="input-label">4. Priority Traffic Congestion (DH Factor):</label>
+            <select id="caseCongestion" class="select-control">
+              <option value="None" selected>None (Free Section - 0.5x Headway)</option>
+              <option value="Low">Low (Nominal Daily Traffic - 1.0x Headway)</option>
+              <option value="High">High (Corridor Congestion - 1.8x Headway)</option>
+            </select>
+          </div>
+
+          <!-- 5. TRETA Block Occupancy -->
+          <div class="input-item">
+            <label for="caseOccupancy" class="input-label">5. TRETA Block Occupancy (Preceding Train):</label>
+            <select id="caseOccupancy" class="select-control">
+              <option value="Track_Clear" selected>Track_Clear (Free Block - +0.0 min)</option>
+              <option value="Preceding_Delayed_Minor">Preceding_Delayed_Minor (+5.0 mins)</option>
+              <option value="Preceding_Delayed_Moderate">Preceding_Delayed_Moderate (+10.0 mins)</option>
+              <option value="Preceding_Delayed_Severe">Preceding_Delayed_Severe (+20.0 mins)</option>
+            </select>
+          </div>
+
+          <!-- 6. Crossing Conflict -->
+          <div class="input-item">
+            <label for="caseCrossing" class="input-label">6. Crossing / Junction Conflict (DCR = DOT + TZT):</label>
+            <select id="caseCrossing" class="select-control">
+              <option value="Double_Quad_Track" selected>Double_Quad_Track (Clear Section - +0.0 min)</option>
+              <option value="Minor_Crossing_Wait">Minor_Crossing_Wait (Single Line - +8.0 mins)</option>
+              <option value="Major_Crossing_Wait">Major_Crossing_Wait (Junction Wait - +25.0 mins)</option>
+            </select>
+          </div>
+
+          <!-- 7. Alarm Chain Pulling -->
+          <div class="input-item">
+            <label for="caseAcp" class="input-label">7. Alarm Chain Pulling (DCP):</label>
+            <select id="caseAcp" class="select-control">
+              <option value="0_Events" selected>0_Events (Nominal - +0.0 min)</option>
+              <option value="1_Event">1_Event (+15.0 mins halt)</option>
+              <option value="2_Events">2_Events (+30.0 mins halt)</option>
+            </select>
+          </div>
+
+          <!-- 8. Engine Failure -->
+          <div class="input-item">
+            <label for="caseEngine" class="input-label">8. Locomotive / Engine Status (DE):</label>
+            <select id="caseEngine" class="select-control">
+              <option value="Nominal" selected>Nominal (Full Traction Power - +0.0 min)</option>
+              <option value="Failure">Failure (+15.0 mins direct + ripple)</option>
+            </select>
+          </div>
+
+          <!-- 9. Terminal Platform Hold -->
+          <div class="input-item">
+            <label for="casePlatform" class="input-label">9. Platform Availability (DPL):</label>
+            <select id="casePlatform" class="select-control">
+              <option value="Platform_Available" selected>Platform_Available (Clear Path - +0.0 min)</option>
+              <option value="Outer_Holding">Outer_Holding (Outer Signal Wait - +15.0 mins)</option>
+            </select>
+          </div>
+
+          <!-- 10. Crew Duty Status -->
+          <div class="input-item">
+            <label for="caseCrew" class="input-label">10. Crew Duty Expiry Status (DCW):</label>
+            <select id="caseCrew" class="select-control">
+              <option value="Duty_Valid" selected>Duty_Valid (Active Crew - +0.0 min)</option>
+              <option value="Duty_Exceeded">Duty_Exceeded (Relief Callout - +45.0 mins)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- FIELDSET 2: SEGMENTATION & STATE BORDER DIVISION CASES -->
+      <div class="fieldset-box" style="background:#f0fdf4;">
+        <div class="fieldset-title" style="color:#166534;">
+          <span>&bull;</span> 2. Corridor Route &amp; State Border Segmentation Cases (RouteDivision &amp; StateBorderDivision)
+        </div>
+
+        <div class="grid-cases-3" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));">
+          <!-- Corridor Filter (Auto-Fetched & Frozen) -->
+          <div class="input-item">
+            <label for="segCorridor" class="input-label" style="display:flex; justify-content:space-between; align-items:center;">
+              <span>Target National Rail Corridor (Auto-Fetched):</span>
+              <span class="border-tag" id="badgeCorridorFrozen" style="background:#e0e7ff; color:#3730a3; font-size:10px; font-weight:700;">&#128274; AUTO-FETCHED &amp; FROZEN</span>
+            </label>
+            <select id="segCorridor" class="select-control" disabled style="background:#f1f5f9; cursor:not-allowed; font-weight:600; color:#1e293b;">
+              <option value="DEL-MUM" selected>DEL-MUM &bull; Delhi ↔ Mumbai (Western Corridor)</option>
+              <option value="DEL-HWH">DEL-HWH &bull; Delhi ↔ Howrah (Eastern Trunk)</option>
+              <option value="DEL-MAS">DEL-MAS &bull; Delhi ↔ Chennai (Grand Trunk)</option>
+              <option value="MUM-MAS">MUM-MAS &bull; Mumbai ↔ Chennai (South-Western)</option>
+              <option value="MUM-HWH">MUM-HWH &bull; Mumbai ↔ Howrah (Central-Eastern)</option>
+              <option value="HWH-MAS">HWH-MAS &bull; Howrah ↔ Chennai (East Coast)</option>
+              <option value="HWH-GHY">HWH-GHY &bull; Howrah ↔ Guwahati (Northeast Frontier)</option>
+            </select>
+          </div>
+
+          <!-- Border Crossing Filter (Auto-Fetched & Frozen) -->
+          <div class="input-item">
+            <label for="segCrossing" class="input-label" style="display:flex; justify-content:space-between; align-items:center;">
+              <span>State Border Traversal Case (Auto-Fetched):</span>
+              <span class="border-tag" id="badgeCrossingFrozen" style="background:#e0e7ff; color:#3730a3; font-size:10px; font-weight:700;">&#128274; AUTO-FETCHED &amp; FROZEN</span>
+            </label>
+            <select id="segCrossing" class="select-control" disabled style="background:#f1f5f9; cursor:not-allowed; font-weight:600; color:#1e293b;">
+              <option value="0" selected>Intra-State (Within same State Border)</option>
+              <option value="1">Inter-State Border Crossing (Border Crossing Hop)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Specific Segment Selector (Station Names Only) & Ahead Station Selector -->
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap:14px; margin-top:14px;">
+          <div>
+            <label for="segSelect" class="input-label">Select Specific Corridor Segment (Delay Origin Station):</label>
+            <select id="segSelect" class="select-control" style="font-size:13px; font-weight:600;">
+              <option value="">-- Complete Route Journey (From Origin Station) --</option>
+            </select>
+          </div>
+
+          <div>
+            <label for="aheadStationSelect" class="input-label">Select Downstream Station Ahead of Delay Origin:</label>
+            <select id="aheadStationSelect" class="select-control" style="font-size:13px; font-weight:600;">
+              <option value="ALL">All Ahead Stations (Downstream Route Progression)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- DATABASE SANDBOX CONTROLS -->
+        <div class="db-sandbox-bar" style="display:flex; justify-content:space-between; align-items:center; background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; padding:12px 16px; margin: 16px 0 6px 0; flex-wrap:wrap; gap:10px;">
+          <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+            <span style="font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:0.5px; color:#475569;">Database Sandbox Integrity:</span>
+            <span id="dbModeBadge" class="border-tag" style="background:#dcfce7; color:#166534; border-color:#86efac; font-weight:700;">
+              DB MODE: PRISTINE (MASTER UNTOUCHED)
+            </span>
+            <span id="dbSimStatusText" style="font-size:12px; color:#64748b;">
+              Master <code>WIN.db</code> is read-only. What-if modifications apply to <code>WIN_SIMULATION.db</code>.
+            </span>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <button type="button" id="btnPushDB" class="chip-btn" style="background:#1e40af; color:#ffffff; font-weight:700; border-color:#1d4ed8; padding:8px 16px; font-size:12px; display:flex; align-items:center; gap:6px; cursor:pointer;">
+              <span>&uArr;</span> PUSH TO DATABASE
+            </button>
+            <button type="button" id="btnResetDB" class="chip-btn" style="background:#fee2e2; color:#b91c1c; font-weight:700; border-color:#fca5a5; padding:8px 16px; font-size:12px; display:flex; align-items:center; gap:6px; cursor:pointer;">
+              <span>&#8634;</span> RESET DB
+            </button>
+          </div>
+        </div>
+
+        <!-- Simulation Toast Notification -->
+        <div id="simToast" style="display:none; padding:10px 14px; border-radius:6px; margin-top:10px; font-size:12.5px; font-weight:600;"></div>
+      </div>
+
+      <!-- Quick Preset Scenario Buttons -->
+      <div class="chips-container" style="margin-bottom:12px;">
+        <span class="chip-label">Quick Scenario Presets:</span>
+        <button type="button" class="chip-btn" id="scenIdeal">Clear Ideal (+0m)</button>
+        <button type="button" class="chip-btn" id="scenFog">Severe Fog (+35m)</button>
+        <button type="button" class="chip-btn" id="scenMonsoon">Monsoon Rain + Crossing Loop</button>
+        <button type="button" class="chip-btn" id="scenBreakdown">Engine Failure + ACP (+30m)</button>
+        <button type="button" class="chip-btn" id="scenCongestedBorder">Border Congestion + Duty Exceeded</button>
+      </div>
+
+      <!-- Action Toolbar -->
+      <div class="action-toolbar">
+        <button type="button" id="btnCheck" class="btn-calculate">
+          <span>&star;</span> CHECK / CALCULATE COMPOUND DELAY
+        </button>
+        <div style="font-size:12px; color:var(--text-muted);">
+          Crosses inputs against <strong>38,880 MasterPnC Scenarios</strong> &amp; <strong>857 Segments</strong> in database <strong>WIN</strong>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- LIVE RESULTS SECTION -->
+    <section class="card" id="resultCard">
+      
+      <div class="card-title-row">
+        <div>
+          <span class="border-tag" id="resTierBadge">T1_PREMIUM</span>
+          <span class="border-tag" id="resTrainNoBadge" style="margin-left:6px;">TRAIN 12001</span>
+          <h2 style="font-size:22px; font-weight:800; color:var(--text-main); margin-top:6px;" id="resTrainName">
+            12001 / NDLS SHATABDI
+          </h2>
+          <div style="font-size:13px; color:var(--text-muted); margin-top:2px;" id="resRouteDesc">
+            NEW DELHI (NDLS) &rarr; BHOPAL JN (BPL) &bull; 707.0 km &bull; 8 Stops
+          </div>
+        </div>
+
+        <div>
+          <div class="status-badge on-time" id="resStatusBadge">
+            <span>&bull;</span>
+            <span id="resStatusText">ON TIME</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Hop-Level Segment Callout if Segment Selected -->
+      <div id="segmentBannerBox" class="segment-banner" style="display:none;">
+        <div>
+          <div class="segment-title" id="segBannerNumber">TS-DEL-MUM-12952-001</div>
+          <div class="segment-desc" id="segBannerDesc">New Delhi (NDLS) &rarr; Kota Jn (KOTA) &bull; 465.0 km &bull; SOURCE_TO_HALT1</div>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span class="border-tag" id="segBannerFromState">Delhi [SB-DL]</span>
+          <span>&rarr;</span>
+          <span class="border-tag" id="segBannerToState">Rajasthan [SB-RJ]</span>
+          <span class="border-tag crossing" id="segBannerCrossingTag">INTER-STATE CROSSING</span>
+        </div>
+      </div>
+
+      <!-- KPI Highlights -->
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-header">Primary Delay (PD)</div>
+          <div class="kpi-value text-red" id="kpiPrimary">+0.0m</div>
+          <div class="kpi-subtext">DW + DTS + DCP + DE</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-header">Cascade Shocks (CD)</div>
+          <div class="kpi-value text-red" id="kpiCascade">+0.0m</div>
+          <div class="kpi-subtext">DH + DCR + DPL + DCW</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-header">Gross Delay (GD)</div>
+          <div class="kpi-value" id="kpiGross">0.0m</div>
+          <div class="kpi-subtext">PD + CD Aggregation</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-header">Buffer Absorbed (MEA)</div>
+          <div class="kpi-value text-green" id="kpiAbsorbed">&minus;0.0m</div>
+          <div class="kpi-subtext">min(GD&times;RR, 0.20&times;EA)</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-header">Final Net Delay (ND)</div>
+          <div class="kpi-value text-green" id="kpiNet">0.0m</div>
+          <div class="kpi-subtext">max(0, GD &minus; MEA)</div>
+        </div>
+        <div class="kpi-card" style="background:#eff6ff; border-color:#bfdbfe;">
+          <div class="kpi-header" style="color:#1e40af;">Predicted ETA (PEA)</div>
+          <div class="kpi-value" style="color:#1e40af; font-size:17px;" id="kpiEta">22:30 IST</div>
+          <div class="kpi-subtext" style="color:#2563eb;" id="kpiSchedArr">Sched: 22:30 IST</div>
+        </div>
+      </div>
+
+      <!-- Step-by-Step Mathematical Derivation Table -->
+      <h3 style="font-size:14px; font-weight:700; margin-bottom:10px; color:#1e293b;">
+        Step-by-Step 5-Stage Mathematical Derivation (Verified in Database WIN)
+      </h3>
+
+      <div style="overflow-x:auto;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th style="width:60px;">Stage</th>
+              <th style="width:220px;">Formula &amp; Component</th>
+              <th>Operational Inputs &amp; Mathematical Breakdown</th>
+              <th style="width:130px; text-align:right;">Calculated Value</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="mono"><strong>Stage 1</strong></td>
+              <td><strong>Primary Delay (PD)</strong><br><span style="font-size:11px; color:#64748b;">PD = DW + DTS + DCP + DE</span></td>
+              <td id="tblStage1Desc">Weather: Clear (+0m) + TSR: None (+0m) + ACP: 0 Events (+0m) + Engine: Nominal (+0m)</td>
+              <td class="mono text-red" style="text-align:right;" id="tblStage1Val">+0.0 mins</td>
+            </tr>
+            <tr>
+              <td class="mono"><strong>Stage 2</strong></td>
+              <td><strong>Cascading Shocks (CD)</strong><br><span style="font-size:11px; color:#64748b;">CD = DH + DCR + DPL + DCW</span></td>
+              <td id="tblStage2Desc">Headway (DH): 1.5m + Crossing (DCR): 0m + Platform (DPL): 0m + Crew (DCW): 0m</td>
+              <td class="mono text-red" style="text-align:right;" id="tblStage2Val">+1.5 mins</td>
+            </tr>
+            <tr class="total-row">
+              <td class="mono"><strong>Stage 3</strong></td>
+              <td><strong>Gross Delay (GD)</strong><br><span style="font-size:11px; color:#64748b;">GD = PD + CD</span></td>
+              <td>Total physical disturbance across all primary and cascading shock waves</td>
+              <td class="mono" style="text-align:right;" id="tblStage3Val">1.5 mins</td>
+            </tr>
+            <tr style="background:#f0fdf4;">
+              <td class="mono"><strong>Stage 4</strong></td>
+              <td><strong>Buffer Absorbed (MEA)</strong><br><span style="font-size:11px; color:#64748b;">MEA = min(GD&times;RR, 0.20&times;EA)</span></td>
+              <td id="tblStage4Desc">Recovery rate: 35.0% &bull; Extra Allotted Time (EA): 90.0 mins (max absorption: 18.0m)</td>
+              <td class="mono text-green" style="text-align:right;" id="tblStage4Val">&minus;0.5 mins</td>
+            </tr>
+            <tr class="total-row">
+              <td class="mono"><strong>Stage 5</strong></td>
+              <td><strong>Net Delay (ND)</strong><br><span style="font-size:11px; color:#64748b;">ND = max(0, GD &minus; MEA)</span></td>
+              <td>Final unrecoverable delay arriving at destination station</td>
+              <td class="mono" style="text-align:right;" id="tblStage5Val">1.0 mins</td>
+            </tr>
+            <tr class="eta-row">
+              <td class="mono" style="color:#1e40af;"><strong>Final</strong></td>
+              <td style="color:#1e40af;"><strong>PREDICTED ETA (PEA)</strong><br><span style="font-size:11px;">PEA = Scheduled_Arrival + ND</span></td>
+              <td id="tblFinalEtaDesc">Working Timetable Arrival (22:30 IST) + Net Delay (1.0 mins)</td>
+              <td class="mono" style="text-align:right; font-size:15px; color:#1e40af;" id="tblFinalEtaVal">22:31 IST</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Plain English Callout -->
+      <div class="callout" id="resCallout">
+        <strong>Simulation Summary:</strong> Train <strong>12001</strong> operates under nominal conditions with an unabsorbed net delay of <strong>1.0 minutes</strong>. Since this is within the 5-minute punctual threshold, the train is designated <strong>ON TIME</strong> at destination.
+      </div>
+
+      <!-- ATTRIBUTE: EXTENSIVE DELAY EXPLANATION -->
+      <div class="card" id="explanationSection" style="margin-top:20px; background:#f8fafc; border:1px solid #cbd5e1; border-radius:10px; padding:18px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+          <h3 style="font-size:15px; font-weight:800; color:#0f172a; display:flex; align-items:center; gap:8px;">
+            <span style="color:#2563eb;">&#128269;</span> Attribute: Delay Calculation Explanation
+          </h3>
+          <span class="border-tag" id="explStatusTag" style="font-weight:700; background:#dcfce7; color:#166534;">ON_TIME</span>
+        </div>
+
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:14px; margin-bottom:14px;">
+          <!-- 1. Kinetic & Equipment -->
+          <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:8px; padding:14px;">
+            <div style="font-size:12px; font-weight:700; color:#dc2626; text-transform:uppercase; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
+              <span>&bull;</span> 1. Kinetic &amp; Equipment Root Causes
+            </div>
+            <ul id="explPrimaryList" style="font-size:12.5px; color:#334155; line-height:1.5; padding-left:18px; display:flex; flex-direction:column; gap:4px;">
+              <li>Nominal conditions.</li>
+            </ul>
+          </div>
+
+          <!-- 2. Cascading Shocks -->
+          <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:8px; padding:14px;">
+            <div style="font-size:12px; font-weight:700; color:#d97706; text-transform:uppercase; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
+              <span>&bull;</span> 2. Network Precedence &amp; Preceding Constraints
+            </div>
+            <ul id="explCascadeList" style="font-size:12.5px; color:#334155; line-height:1.5; padding-left:18px; display:flex; flex-direction:column; gap:4px;">
+              <li>Nominal signalling and platform conditions.</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- 3. Timetable Recovery & Directive -->
+        <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:8px; padding:14px;">
+          <div style="font-size:12px; font-weight:700; color:#166534; text-transform:uppercase; margin-bottom:6px;">
+            3. Timetable Buffer Recovery &amp; Section Dispatch Assessment
+          </div>
+          <p id="explRecoveryText" style="font-size:12.5px; color:#334155; line-height:1.5; margin-bottom:10px;"></p>
+          <div id="explDispatchDirective" style="font-size:12.5px; font-weight:600; color:#1e40af; background:#eff6ff; border:1px solid #bfdbfe; border-radius:6px; padding:8px 12px;"></div>
+        </div>
+      </div>
+
+      <!-- ATTRIBUTE: DOWNSTREAM STATIONS AHEAD DELAY PROGRESSION & EA ABSORPTION -->
+      <div class="card" id="aheadStationsSection" style="margin-top:20px; background:#ffffff; border:1px solid #cbd5e1; border-radius:10px; padding:18px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:12px;">
+          <div>
+            <h3 style="font-size:15px; font-weight:800; color:#0f172a; display:flex; align-items:center; gap:8px;">
+              <span style="color:#2563eb;">&#128646;</span> Downstream Stations Ahead (Delay Progression &amp; Timetable Buffer EA Absorption)
+            </h3>
+            <p style="font-size:12px; color:#64748b; margin-top:2px;" id="aheadStationsSubtitle">
+              Delay added ahead of chosen station; stations before origin experience zero delay, while downstream hops absorb delay via timetable slack (EA).
+            </p>
+          </div>
+          <div id="aheadAbsorptionBadge" class="border-tag" style="background:#dcfce7; color:#166534; font-weight:700; font-size:11px;">
+            ON TIME &bull; BUFFER READY
+          </div>
+        </div>
+
+        <div style="overflow-x:auto;">
+          <table class="data-table" id="aheadStationsTable" style="margin-bottom:0;">
+            <thead>
+              <tr>
+                <th style="width:45px; text-align:center;">Seq</th>
+                <th style="width:240px;">Station Name</th>
+                <th style="width:110px;">Distance</th>
+                <th style="width:130px;">Scheduled Arrival</th>
+                <th style="width:110px;">Gross Delay</th>
+                <th style="width:120px;">EA Slack Absorbed</th>
+                <th style="width:120px;">Net Arrival Delay</th>
+                <th style="width:140px;">Predicted Arrival</th>
+                <th style="width:120px; text-align:center;">Status</th>
+              </tr>
+            </thead>
+            <tbody id="aheadStationsTableBody">
+              <tr>
+                <td colspan="9" style="text-align:center; color:#64748b; padding:16px;">
+                  Select a train and corridor segment to inspect downstream station delays.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ATTRIBUTE: CASCADED DELAYS & TEMPORAL TRAIN OVERLAYS -->
+      <div class="card" id="cascadedSection" style="margin-top:20px; background:#ffffff; border:1px solid #cbd5e1; border-radius:10px; padding:18px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:12px;">
+          <div>
+            <h3 style="font-size:15px; font-weight:800; color:#0f172a; display:flex; align-items:center; gap:8px;">
+              <span style="color:#dc2626;">&#9889;</span> Attribute: Cascaded Delays &amp; Temporal Train Overlays
+            </h3>
+            <p style="font-size:12px; color:#64748b; margin-top:2px;">
+              Calculates knock-on network disruptions transmitted to trailing and concurrent trains sharing this Treta segment window
+            </p>
+          </div>
+          <div style="display:flex; gap:16px;">
+            <div style="text-align:right;">
+              <span style="font-size:11px; color:#64748b; text-transform:uppercase; font-weight:700;">Overlaid Trains:</span>
+              <div id="cascadeTrainsCount" style="font-size:20px; font-weight:800; color:#dc2626;">0</div>
+            </div>
+            <div style="text-align:right;">
+              <span style="font-size:11px; color:#64748b; text-transform:uppercase; font-weight:700;">Cumulative Knock-on Delay:</span>
+              <div id="cascadeTotalMins" style="font-size:20px; font-weight:800; color:#d97706;">+0.0m</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="overflow-x:auto;">
+          <table class="data-table" id="cascadeTable" style="margin-bottom:0;">
+            <thead>
+              <tr>
+                <th style="width:120px;">Train No / Name</th>
+                <th style="width:85px;">Tier</th>
+                <th style="width:190px;">Corridor Hop / Section</th>
+                <th style="width:125px;">Time Window</th>
+                <th>Conflict Type &amp; Dispatch Impact</th>
+                <th style="width:130px; text-align:right;">Transmitted Delay</th>
+              </tr>
+            </thead>
+            <tbody id="cascadeTableBody">
+              <tr>
+                <td colspan="6" style="text-align:center; color:#64748b; padding:16px;">
+                  No temporal train overlay conflicts detected on this segment.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </section>
+
+    <footer class="footer">
+      Indian Railways Compound Delay &amp; Segment Engine &bull; Connected to Database <strong>WIN</strong> &bull; Complete 5-Stage Mathematical Verification
+    </footer>
+
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      // Input Elements
+      const trainSearchInput = document.getElementById('trainSearchInput');
+      const searchSuggestions = document.getElementById('searchSuggestions');
+      const autoPickupBanner = document.getElementById('autoPickupBanner');
+      const autoPickupDetails = document.getElementById('autoPickupDetails');
+
+      const caseTier = document.getElementById('caseTier');
+      const caseWeather = document.getElementById('caseWeather');
+      const caseTsr = document.getElementById('caseTsr');
+      const caseCongestion = document.getElementById('caseCongestion');
+      const caseOccupancy = document.getElementById('caseOccupancy');
+      const caseCrossing = document.getElementById('caseCrossing');
+      const caseAcp = document.getElementById('caseAcp');
+      const caseEngine = document.getElementById('caseEngine');
+      const casePlatform = document.getElementById('casePlatform');
+      const caseCrew = document.getElementById('caseCrew');
+
+      // Segmentation Selectors
+      const segCorridor = document.getElementById('segCorridor');
+      const segCrossing = document.getElementById('segCrossing');
+      const segSelect = document.getElementById('segSelect');
+
+      // Sandbox DB Controls
+      const btnPushDB = document.getElementById('btnPushDB');
+      const btnResetDB = document.getElementById('btnResetDB');
+      const dbModeBadge = document.getElementById('dbModeBadge');
+      const simToast = document.getElementById('simToast');
+
+      // Buttons
+      const btnCheck = document.getElementById('btnCheck');
+      const btnResetAll = document.getElementById('btnResetAll');
+      const btnTopCompoundEta = document.getElementById('btnTopCompoundEta');
+
+      let allSegmentsCache = [];
+      let searchDebounceTimer = null;
+      let currentPredictData = null;
+
+      // Check Database Sandbox Status on load
+      async function checkDbStatus() {
+        try {
+          const res = await fetch('/api/simulation/status');
+          if (res.ok) {
+            const st = await res.json();
+            updateDbStatusUI(st);
+          }
+        } catch (e) {
+          console.warn('DB Status check failed:', e);
+        }
+      }
+
+      function updateDbStatusUI(st) {
+        if (!dbModeBadge) return;
+        if (st.is_pristine) {
+          dbModeBadge.textContent = 'DB MODE: PRISTINE (MASTER UNTOUCHED)';
+          dbModeBadge.style.background = '#dcfce7';
+          dbModeBadge.style.color = '#166534';
+          dbModeBadge.style.borderColor = '#86efac';
+        } else {
+          dbModeBadge.textContent = `DB MODE: SIMULATION SANDBOX (${st.modifications_count} MODS)`;
+          dbModeBadge.style.background = '#fef3c7';
+          dbModeBadge.style.color = '#b45309';
+          dbModeBadge.style.borderColor = '#fcd34d';
+        }
+      }
+
+      function showToast(msg, isSuccess = true) {
+        if (!simToast) return;
+        simToast.textContent = msg;
+        simToast.style.display = 'block';
+        if (isSuccess) {
+          simToast.style.background = '#ecfdf5';
+          simToast.style.color = '#065f46';
+          simToast.style.border = '1px solid #a7f3d0';
+        } else {
+          simToast.style.background = '#fef2f2';
+          simToast.style.color = '#991b1b';
+          simToast.style.border = '1px solid #fecaca';
+        }
+        setTimeout(() => {
+          simToast.style.display = 'none';
+        }, 6000);
+      }
+
+      // Initial Load of Segments from backend
+      async function loadSegments() {
+        try {
+          const res = await fetch('/api/segments?limit=2500');
+          if (res.ok) {
+            allSegmentsCache = await res.json();
+            renderSegmentOptions();
+          }
+        } catch (err) {
+          console.warn('Could not fetch segments:', err);
+        }
+      }
+
+      let currentTrainInfo = null;
+
+      function renderSegmentOptions(info) {
+        segSelect.innerHTML = '<option value="">-- Complete Route Journey (From Origin Station) --</option>';
+        const segs = (info && info.segments) ? info.segments : [];
+        segs.forEach(s => {
+          const opt = document.createElement('option');
+          opt.value = s.treta_segment_number;
+          const fromStn = s.from_station_clean || s.from_station_name || s.from_station_code;
+          const toStn = s.to_station_clean || s.to_station_name || s.to_station_code;
+          opt.textContent = `${fromStn} → ${toStn}`;
+          segSelect.appendChild(opt);
+        });
+      }
+
+      function updateAheadStationsDropdown() {
+        const aheadSelect = document.getElementById('aheadStationSelect');
+        if (!aheadSelect) return;
+        const selectedSegVal = segSelect.value;
+        const allStops = (currentTrainInfo && currentTrainInfo.stations) ? currentTrainInfo.stations : [];
+
+        let originCode = null;
+        if (selectedSegVal && currentTrainInfo && currentTrainInfo.segments) {
+          const segMatch = currentTrainInfo.segments.find(s => s.treta_segment_number === selectedSegVal);
+          if (segMatch) {
+            originCode = segMatch.from_station_code;
+          }
+        }
+
+        aheadSelect.innerHTML = '<option value="ALL" selected>All Ahead Stations (Downstream Route Progression)</option>';
+        let reachedOrigin = (originCode === null);
+
+        allStops.forEach(stn => {
+          if (!reachedOrigin) {
+            if (stn.station_code === originCode) {
+              reachedOrigin = true;
+            }
+            return;
+          }
+          const opt = document.createElement('option');
+          opt.value = stn.station_code;
+          const dispTime = stn.arr_time !== 'SRC' ? stn.arr_time : stn.dep_time;
+          opt.textContent = `${stn.station_name} (${dispTime} IST)`;
+          aheadSelect.appendChild(opt);
+        });
+      }
+
+      // Auto-Pickup Individual Parameters when Train Number is Specified
+      async function autoPickupTrain(trainNo) {
+        if (!trainNo) return;
+        const cleanNo = String(trainNo).trim();
+        try {
+          const res = await fetch(`/api/train_info?train_no=${encodeURIComponent(cleanNo)}`);
+          if (!res.ok) {
+            runCalculation();
+            return;
+          }
+          const info = await res.json();
+          if (info.error) {
+            runCalculation();
+            return;
+          }
+          currentTrainInfo = info;
+
+          // 1. Auto-pickup Train Tier and FREEZE
+          if (info.train_tier) {
+            let tierVal = info.train_tier;
+            if (tierVal === 'T3_EXPRESS' && !caseTier.querySelector('option[value="T3_EXPRESS"]')) {
+              tierVal = 'T3_EXPRESS_PASSENGER';
+            }
+            caseTier.value = tierVal;
+            caseTier.disabled = true;
+          }
+
+          // 2. Auto-pickup Target National Rail Corridor and FREEZE
+          if (info.relevant_corridor_slug) {
+            segCorridor.value = info.relevant_corridor_slug;
+            segCorridor.disabled = true;
+          }
+
+          // 3. Auto-pickup State Border Traversal Case and FREEZE
+          if (info.default_is_border_crossing !== undefined) {
+            segCrossing.value = String(info.default_is_border_crossing);
+            segCrossing.disabled = true;
+          }
+
+          // 4. Render station-name-only segments for this train
+          renderSegmentOptions(info);
+
+          // 5. Update Downstream Ahead Station Selector
+          updateAheadStationsDropdown();
+
+          // 6. Update Auto-Pickup Indicator Banner
+          if (autoPickupBanner && autoPickupDetails) {
+            autoPickupBanner.style.display = 'flex';
+            const segMsg = info.available_segments_count > 0 
+              ? `${info.available_segments_count} Station Hops Mapped in Database WIN` 
+              : 'Full Journey Analysis';
+            autoPickupDetails.innerHTML = `
+              Train <strong>${info.train_no}</strong> (${info.train_name}) &bull; 
+              Tier: <strong>${info.train_tier}</strong> &bull; 
+              Corridor (Frozen): <strong>${info.relevant_corridor_slug}</strong> (${info.relevant_corridor_name}) &bull; 
+              EA Buffer Slack: <strong>${info.EA_allotted_mins.toFixed(1)}m</strong> &bull; 
+              ${segMsg}
+            `;
+          }
+
+          // 7. Run live calculation
+          runCalculation();
+        } catch (err) {
+          console.warn('Auto-pickup error:', err);
+          runCalculation();
+        }
+      }
+
+      // When specific segment is chosen -> update border traversal, ahead stations, and recalculate
+      segSelect.addEventListener('change', () => {
+        const segVal = segSelect.value;
+        if (currentTrainInfo && currentTrainInfo.segments) {
+          const match = currentTrainInfo.segments.find(s => s.treta_segment_number === segVal);
+          if (match) {
+            segCrossing.value = String(match.is_border_crossing !== undefined ? match.is_border_crossing : 0);
+            segCrossing.disabled = true;
+          } else {
+            segCrossing.value = String(currentTrainInfo.default_is_border_crossing || 0);
+            segCrossing.disabled = true;
+          }
+        }
+        updateAheadStationsDropdown();
+        runCalculation();
+      });
+
+      const aheadStationElem = document.getElementById('aheadStationSelect');
+      if (aheadStationElem) {
+        aheadStationElem.addEventListener('change', () => {
+          if (currentPredictData) {
+            renderAheadStationsTable(currentPredictData);
+          }
+        });
+      }
+
+      // Quick Train Preset Chips
+      document.querySelectorAll('.chips-container .chip-btn[data-train]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.chips-container .chip-btn[data-train]').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          const tNo = btn.getAttribute('data-train');
+          trainSearchInput.value = tNo;
+          autoPickupTrain(tNo);
+        });
+      });
+
+      // Live Autocomplete / Search Suggestions
+      trainSearchInput.addEventListener('input', () => {
+        const val = trainSearchInput.value.trim();
+        clearTimeout(searchDebounceTimer);
+        if (val.length < 2) {
+          searchSuggestions.style.display = 'none';
+          return;
+        }
+
+        searchDebounceTimer = setTimeout(async () => {
+          try {
+            const res = await fetch(`/api/search?q=${encodeURIComponent(val)}`);
+            if (!res.ok) return;
+            const items = await res.json();
+            if (!items || items.length === 0) {
+              searchSuggestions.style.display = 'none';
+              return;
+            }
+
+            searchSuggestions.innerHTML = '';
+            items.slice(0, 8).forEach(item => {
+              const div = document.createElement('div');
+              div.className = 'search-item';
+              div.innerHTML = `
+                <div>
+                  <span style="font-family:var(--font-mono); font-weight:800; color:var(--primary);">${item.train_no}</span>
+                  <span style="font-weight:600; margin-left:6px;">${item.train_name}</span>
+                  <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">
+                    ${item.source} &rarr; ${item.destination} &bull; ${item.corridor_name || item.corridor_slug}
+                  </div>
+                </div>
+                <div style="display:flex; align-items:center; gap:6px;">
+                  <span class="border-tag" style="font-size:10px;">${item.train_tier}</span>
+                  <span class="border-tag" style="font-size:10px; background:#eff6ff; color:#1e40af;">${item.corridor_slug}</span>
+                </div>
+              `;
+              div.addEventListener('click', () => {
+                trainSearchInput.value = item.train_no;
+                searchSuggestions.style.display = 'none';
+                autoPickupTrain(item.train_no);
+              });
+              searchSuggestions.appendChild(div);
+            });
+            searchSuggestions.style.display = 'block';
+          } catch (err) {
+            console.warn('Search failed:', err);
+          }
+        }, 200);
+      });
+
+      // Hide suggestions when clicking outside
+      document.addEventListener('click', (e) => {
+        if (!trainSearchInput.contains(e.target) && !searchSuggestions.contains(e.target)) {
+          searchSuggestions.style.display = 'none';
+        }
+      });
+
+      trainSearchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          searchSuggestions.style.display = 'none';
+          autoPickupTrain(trainSearchInput.value.trim());
+        }
+      });
+
+      trainSearchInput.addEventListener('change', () => {
+        if (trainSearchInput.value.trim()) {
+          autoPickupTrain(trainSearchInput.value.trim());
+        }
+      });
+
+      trainSearchInput.addEventListener('blur', () => {
+        setTimeout(() => {
+          if (trainSearchInput.value.trim()) {
+            autoPickupTrain(trainSearchInput.value.trim());
+          }
+        }, 250);
+      });
+
+      // Quick Scenario Presets
+      document.getElementById('scenIdeal').addEventListener('click', () => {
+        resetControlsToIdeal();
+        runCalculation();
+      });
+
+      document.getElementById('scenFog').addEventListener('click', () => {
+        caseWeather.value = 'Fog';
+        caseOccupancy.value = 'Preceding_Delayed_Severe';
+        caseTsr.value = 'Minor';
+        runCalculation();
+      });
+
+      document.getElementById('scenMonsoon').addEventListener('click', () => {
+        caseWeather.value = 'Heavy_Rain';
+        caseCrossing.value = 'Major_Crossing_Wait';
+        caseCongestion.value = 'High';
+        runCalculation();
+      });
+
+      document.getElementById('scenBreakdown').addEventListener('click', () => {
+        caseEngine.value = 'Failure';
+        caseAcp.value = '1_Event';
+        casePlatform.value = 'Outer_Holding';
+        runCalculation();
+      });
+
+      document.getElementById('scenCongestedBorder').addEventListener('click', () => {
+        caseCongestion.value = 'High';
+        caseCrew.value = 'Duty_Exceeded';
+        caseAcp.value = '2_Events';
+        caseCrossing.value = 'Major_Crossing_Wait';
+        runCalculation();
+      });
+
+      function resetControlsToIdeal() {
+        caseWeather.value = 'Clear';
+        caseTsr.value = 'None';
+        caseCongestion.value = 'None';
+        caseOccupancy.value = 'Track_Clear';
+        caseCrossing.value = 'Double_Quad_Track';
+        caseAcp.value = '0_Events';
+        caseEngine.value = 'Nominal';
+        casePlatform.value = 'Platform_Available';
+        caseCrew.value = 'Duty_Valid';
+      }
+
+      btnResetAll.addEventListener('click', () => {
+        resetControlsToIdeal();
+        segCorridor.value = 'ALL';
+        segCrossing.value = 'ALL';
+        renderSegmentOptions();
+        autoPickupTrain(trainSearchInput.value.trim() || '12001');
+      });
+
+      btnCheck.addEventListener('click', runCalculation);
+      btnTopCompoundEta.addEventListener('click', () => {
+        runCalculation();
+        document.getElementById('resultCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+
+      // PUSH TO DATABASE BUTTON
+      btnPushDB.addEventListener('click', async () => {
+        if (!currentPredictData) {
+          showToast('Please calculate compound delay first before pushing.', false);
+          return;
+        }
+        btnPushDB.disabled = true;
+        btnPushDB.textContent = 'Pushing to DB...';
+        try {
+          const sb = currentPredictData.segment_breakdown;
+          const net = sb ? sb.segment_net_delay : currentPredictData.math_resolution.NetDelay;
+          const eta = sb ? sb.segment_predicted_eta : currentPredictData.math_resolution.Predicted_ETA;
+          const stat = sb ? sb.segment_status : currentPredictData.math_resolution.Arrival_Status;
+
+          const payload = {
+            train_no: currentPredictData.train_no,
+            treta_segment_number: segSelect.value || (sb ? sb.treta_segment_number : ''),
+            net_delay_mins: net,
+            gross_delay_mins: currentPredictData.math_resolution.grossDelay,
+            primary_delay_mins: currentPredictData.primary_breakdown.PrimaryDelay,
+            cascade_delay_mins: currentPredictData.cascade_breakdown.CascadeDelay,
+            predicted_eta: eta,
+            status: stat,
+            cascaded_trains: currentPredictData.cascaded_delays ? currentPredictData.cascaded_delays.overlaid_trains : []
+          };
+
+          const res = await fetch('/api/simulation/push', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          const json = await res.json();
+          if (json.success) {
+            showToast(`\u2713 [PUSHED TO SIMULATION DB] ${json.message}`);
+            checkDbStatus();
+          } else {
+            showToast(`Push error: ${json.detail || 'Failed to update database'}`, false);
+          }
+        } catch (err) {
+          showToast(`Network error: ${err.message}`, false);
+        } finally {
+          btnPushDB.disabled = false;
+          btnPushDB.innerHTML = '<span>&uArr;</span> PUSH TO DATABASE';
+        }
+      });
+
+      // RESET DB BUTTON
+      btnResetDB.addEventListener('click', async () => {
+        btnResetDB.disabled = true;
+        btnResetDB.textContent = 'Resetting DB...';
+        try {
+          const res = await fetch('/api/simulation/reset', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+          });
+          const json = await res.json();
+          if (json.success) {
+            showToast(`\u2713 [RESET DB] Simulation database sandbox restored from master WIN.db.`);
+            checkDbStatus();
+            runCalculation();
+          } else {
+            showToast(`Reset error: ${json.detail || 'Failed to reset'}`, false);
+          }
+        } catch (err) {
+          showToast(`Network error: ${err.message}`, false);
+        } finally {
+          btnResetDB.disabled = false;
+          btnResetDB.innerHTML = '<span>&#8634;</span> RESET DB';
+        }
+      });
+
+      // Core Calculation Request
+      async function runCalculation() {
+        btnCheck.textContent = 'Calculating...';
+
+        const qTrain = trainSearchInput.value.trim() || '12001';
+        const tier = caseTier.value;
+        const weather = caseWeather.value;
+        const tsr = caseTsr.value;
+        const congestion = caseCongestion.value;
+        const occupancy = caseOccupancy.value;
+        const crossing = caseCrossing.value;
+        const acp = caseAcp.value;
+        const engine = caseEngine.value;
+        const platform = casePlatform.value;
+        const crew = caseCrew.value;
+        const segNumber = segSelect.value || '';
+
+        const params = new URLSearchParams({
+          train_no: qTrain,
+          train_tier: tier,
+          weather: weather,
+          congestion: congestion,
+          tsr: tsr,
+          treta_block_occupancy: occupancy,
+          crossing_conflict: crossing,
+          chain_pulling: acp,
+          engine_failure: engine,
+          terminal_platform_hold: platform,
+          crew_duty_status: crew
+        });
+
+        if (segNumber) {
+          params.append('treta_segment_number', segNumber);
+        }
+
+        try {
+          const res = await fetch(`/api/predict?${params.toString()}`);
+          if (!res.ok) throw new Error('Simulation failed');
+          const data = await res.json();
+          renderResults(data);
+        } catch (err) {
+          console.error(err);
+        } finally {
+          btnCheck.innerHTML = '<span>&star;</span> CHECK / CALCULATE COMPOUND DELAY';
+        }
+      }
+
+      function renderResults(data) {
+        currentPredictData = data;
+        const m = data.math_resolution;
+        const p = data.primary_breakdown;
+        const c = data.cascade_breakdown;
+        const isLate = m.Arrival_Status === 'LATE';
+
+        // Header info
+        document.getElementById('resTierBadge').textContent = data.train_tier;
+        document.getElementById('resTrainNoBadge').textContent = `TRAIN ${data.train_no}`;
+        document.getElementById('resTrainName').textContent = `${data.train_no} / ${data.train_name}`;
+        document.getElementById('resRouteDesc').textContent = `${data.source_station} → ${data.destination_station} • ${data.total_distance_km} km • ${data.total_halts} Stops`;
+
+        // Status badge
+        const badge = document.getElementById('resStatusBadge');
+        const badgeText = document.getElementById('resStatusText');
+        const delayAbsorbed = (m.NetDelay <= 0.0 || m.delay_absorbed_completely);
+
+        if (delayAbsorbed) {
+          badge.className = 'status-badge on-time';
+          badgeText.textContent = 'ON TIME (All Delay Absorbed by EA Buffer)';
+        } else if (isLate) {
+          badge.className = 'status-badge late';
+          badgeText.textContent = `DELAYED (+${m.NetDelay} mins)`;
+        } else {
+          badge.className = 'status-badge on-time';
+          badgeText.textContent = `ON TIME (${m.NetDelay} mins \u2264 5m)`;
+        }
+
+        // Segment Banner
+        const segBox = document.getElementById('segmentBannerBox');
+        if (data.segment_breakdown) {
+          const sb = data.segment_breakdown;
+          segBox.style.display = 'flex';
+          document.getElementById('segBannerNumber').textContent = sb.treta_segment_number;
+          document.getElementById('segBannerDesc').textContent = `${sb.from_station} → ${sb.to_station} • ${sb.segment_distance_km} km • ${sb.segment_type}`;
+          document.getElementById('segBannerFromState').textContent = sb.from_state_border;
+          document.getElementById('segBannerToState').textContent = sb.to_state_border;
+          const xingTag = document.getElementById('segBannerCrossingTag');
+          if (sb.is_border_crossing == 1) {
+            xingTag.className = 'border-tag crossing';
+            xingTag.textContent = `INTER-STATE CROSSING (${sb.state_border_transition})`;
+          } else {
+            xingTag.className = 'border-tag intra';
+            xingTag.textContent = `INTRA-STATE (${sb.state_border_transition})`;
+          }
+        } else {
+          segBox.style.display = 'none';
+        }
+
+        // KPI values
+        document.getElementById('kpiPrimary').textContent = `+${p.PrimaryDelay.toFixed(1)}m`;
+        document.getElementById('kpiCascade').textContent = `+${c.CascadeDelay.toFixed(1)}m`;
+        document.getElementById('kpiGross').textContent = `${m.grossDelay.toFixed(1)}m`;
+        document.getElementById('kpiAbsorbed').textContent = `\u2212${m.Absorbed_by_EA.toFixed(1)}m`;
+        document.getElementById('kpiNet').textContent = delayAbsorbed ? '0.0m' : `${m.NetDelay.toFixed(1)}m`;
+        document.getElementById('kpiNet').className = `kpi-value ${(!delayAbsorbed && isLate) ? 'text-red' : 'text-green'}`;
+        document.getElementById('kpiEta').textContent = m.Predicted_ETA;
+        document.getElementById('kpiSchedArr').textContent = `Sched: ${m.ScheduledDestinationArrival} IST`;
+
+        // Table breakdown
+        document.getElementById('tblStage1Desc').textContent = `Weather: ${data.applied_cases.weather} (+${p.d_weather}m) + TSR: ${data.applied_cases.tsr_level} (+${p.d_tsr}m) + ACP: ${data.applied_cases.alarm_chain_pulling} (+${p.d_chain_pulling}m) + Engine: ${data.applied_cases.engine_failure} (+${p.d_engine_failure}m)`;
+        document.getElementById('tblStage1Val').textContent = `+${p.PrimaryDelay.toFixed(1)} mins`;
+
+        document.getElementById('tblStage2Desc').textContent = `Headway (DH): +${c.d_headway}m + Crossing (DCR): +${c.d_crossing}m + Platform (DPL): +${c.d_platform_hold}m + Crew (DCW): +${c.d_crew}m`;
+        document.getElementById('tblStage2Val').textContent = `+${c.CascadeDelay.toFixed(1)} mins`;
+
+        document.getElementById('tblStage3Val').textContent = `${m.grossDelay.toFixed(1)} mins`;
+
+        document.getElementById('tblStage4Desc').textContent = `Recovery rate: ${data.train_tier === 'T1_PREMIUM' ? '35%' : (data.train_tier === 'T2_SUPERFAST' ? '25%' : '15%')} • Extra Allotted Time (EA Buffer Slack): ${data.EA_allotted_mins.toFixed(1)} mins`;
+        document.getElementById('tblStage4Val').textContent = `\u2212${m.Absorbed_by_EA.toFixed(1)} mins`;
+
+        document.getElementById('tblStage5Val').textContent = delayAbsorbed ? '0.0 mins' : `${m.NetDelay.toFixed(1)} mins`;
+
+        document.getElementById('tblFinalEtaDesc').textContent = delayAbsorbed
+          ? `Working Timetable Scheduled Arrival (${m.ScheduledDestinationArrival}) • Delay fully absorbed by EA buffer`
+          : `Working Timetable Scheduled Arrival (${m.ScheduledDestinationArrival}) + Net Delay (${m.NetDelay.toFixed(1)} mins)`;
+        document.getElementById('tblFinalEtaVal').textContent = m.Predicted_ETA;
+
+        // Plain English Callout
+        const callout = document.getElementById('resCallout');
+        if (delayAbsorbed) {
+          callout.style.borderLeftColor = '#10b981';
+          callout.innerHTML = `
+            <strong>Operational Delay Summary:</strong> Train <strong>${data.train_no}</strong> encountered <strong>${m.grossDelay.toFixed(1)} minutes</strong> of gross disturbance. The entire delay was <strong>completely absorbed by timetable buffer slack (EA Allotted: ${data.EA_allotted_mins.toFixed(1)}m)</strong>. Scheduled arrival is preserved at <strong>${m.Predicted_ETA}</strong> with <strong>0.0 minutes net delay (ON TIME)</strong>.
+          `;
+        } else if (isLate) {
+          callout.style.borderLeftColor = '#ef4444';
+          callout.innerHTML = `
+            <strong>Operational Delay Summary:</strong> Train <strong>${data.train_no}</strong> accumulated <strong>${m.grossDelay.toFixed(1)} minutes</strong> of total gross delay (${p.PrimaryDelay.toFixed(1)}m primary + ${c.CascadeDelay.toFixed(1)}m cascading domino shocks). The train absorbs <strong>${m.Absorbed_by_EA.toFixed(1)} minutes</strong> using its scheduled timetable buffer (EA), resulting in an arrival net delay of <strong>${m.NetDelay.toFixed(1)} minutes</strong> (Designated <strong>LATE</strong> at ${m.Predicted_ETA}).
+          `;
+        } else {
+          callout.style.borderLeftColor = '#10b981';
+          callout.innerHTML = `
+            <strong>Operational Delay Summary:</strong> Train <strong>${data.train_no}</strong> accumulated <strong>${m.grossDelay.toFixed(1)} minutes</strong> of gross delay. Because the physical timetable buffer recovers <strong>${m.Absorbed_by_EA.toFixed(1)} minutes</strong>, the residual net delay is <strong>${m.NetDelay.toFixed(1)} minutes</strong> (&le; 5.0 mins punctuality window). The train is designated <strong>ON TIME</strong> arriving at <strong>${m.Predicted_ETA}</strong>.
+          `;
+        }
+
+        // Render Ahead Stations Table
+        renderAheadStationsTable(data);
+
+        // Render Explanation Section
+        if (data.explanation) {
+          const exp = data.explanation;
+          const explStatusTag = document.getElementById('explStatusTag');
+          explStatusTag.textContent = exp.status;
+          if (exp.status === 'LATE') {
+            explStatusTag.style.background = '#fef2f2';
+            explStatusTag.style.color = '#dc2626';
+            explStatusTag.style.borderColor = '#fca5a5';
+          } else {
+            explStatusTag.style.background = '#dcfce7';
+            explStatusTag.style.color = '#166534';
+            explStatusTag.style.borderColor = '#86efac';
+          }
+
+          const primList = document.getElementById('explPrimaryList');
+          primList.innerHTML = '';
+          (exp.primary_reasons || []).forEach(r => {
+            const li = document.createElement('li');
+            li.textContent = r;
+            primList.appendChild(li);
+          });
+
+          const cascList = document.getElementById('explCascadeList');
+          cascList.innerHTML = '';
+          (exp.cascade_reasons || []).forEach(r => {
+            const li = document.createElement('li');
+            li.textContent = r;
+            cascList.appendChild(li);
+          });
+
+          document.getElementById('explRecoveryText').textContent = exp.recovery_summary;
+          document.getElementById('explDispatchDirective').innerHTML = `<strong>Dispatch Directive:</strong> ${exp.dispatch_directive}`;
+        }
+
+        // Render Cascaded Delays & Temporal Overlays Table
+        if (data.cascaded_delays) {
+          const cd = data.cascaded_delays;
+          document.getElementById('cascadeTrainsCount').textContent = cd.total_affected_trains;
+          document.getElementById('cascadeTotalMins').textContent = `+${cd.cumulative_knock_on_mins.toFixed(1)}m`;
+
+          const tbody = document.getElementById('cascadeTableBody');
+          tbody.innerHTML = '';
+          if (!cd.overlaid_trains || cd.overlaid_trains.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#64748b; padding:16px;">No temporal train overlay conflicts detected on this segment.</td></tr>';
+          } else {
+            cd.overlaid_trains.forEach(t => {
+              const tr = document.createElement('tr');
+              const sevColor = t.impact_severity === 'HIGH' ? '#dc2626' : (t.impact_severity === 'MODERATE' ? '#d97706' : '#2563eb');
+              tr.innerHTML = `
+                <td>
+                  <span style="font-family:var(--font-mono); font-weight:700; color:var(--primary);">${t.train_no}</span><br>
+                  <span style="font-size:11px; color:#475569;">${t.train_name}</span>
+                </td>
+                <td><span class="border-tag" style="font-size:10px;">${t.train_tier}</span></td>
+                <td style="font-size:11.5px;">
+                  <code>${t.corridor_segment}</code><br>
+                  <span style="color:#64748b;">${t.station_section}</span>
+                </td>
+                <td style="font-size:11.5px; font-family:var(--font-mono);">${t.scheduled_window}</td>
+                <td style="font-size:12px;">
+                  <span class="border-tag" style="color:${sevColor}; border-color:${sevColor}; font-size:10px; margin-bottom:2px; display:inline-block;">${t.conflict_type}</span>
+                </td>
+                <td class="mono text-red" style="text-align:right; font-weight:700;">+${t.transmitted_delay_mins.toFixed(1)}m</td>
+              `;
+              tbody.appendChild(tr);
+            });
+          }
+        }
+      }
+
+      function renderAheadStationsTable(data) {
+        const tbody = document.getElementById('aheadStationsTableBody');
+        const badge = document.getElementById('aheadAbsorptionBadge');
+        if (!tbody) return;
+
+        tbody.innerHTML = '';
+        const aheadList = data.ahead_stations || [];
+        const filterElem = document.getElementById('aheadStationSelect');
+        const filterVal = filterElem ? filterElem.value : 'ALL';
+
+        let displayRows = aheadList;
+        if (filterVal && filterVal !== 'ALL') {
+          displayRows = aheadList.filter(s => s.station_code === filterVal || s.is_origin);
+        }
+
+        if (displayRows.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; color:#64748b; padding:16px;">No downstream stations found ahead of delay origin.</td></tr>';
+          return;
+        }
+
+        let allAbsorbed = true;
+        displayRows.forEach(stn => {
+          if (stn.is_ahead && !stn.delay_absorbed) {
+            allAbsorbed = false;
+          }
+          const tr = document.createElement('tr');
+          if (stn.is_origin) {
+            tr.style.background = '#fffbeb';
+          } else if (stn.delay_absorbed) {
+            tr.style.background = '#f0fdf4';
+          }
+
+          let statusBadge;
+          if (stn.delay_absorbed || stn.status === 'ON_TIME') {
+            statusBadge = '<span class="border-tag" style="background:#dcfce7; color:#166534; font-weight:700;">ON TIME</span>';
+          } else if (stn.status === 'DELAY_ORIGIN') {
+            statusBadge = '<span class="border-tag" style="background:#fef3c7; color:#92400e; font-weight:700;">ORIGIN</span>';
+          } else {
+            statusBadge = `<span class="border-tag" style="background:#fee2e2; color:#dc2626; font-weight:700;">LATE (+${stn.net_delay_mins.toFixed(1)}m)</span>`;
+          }
+
+          let netDisplay;
+          if (stn.delay_absorbed) {
+            netDisplay = '<span style="color:#059669; font-weight:700;">0.0m (Absorbed)</span>';
+          } else if (stn.is_origin) {
+            netDisplay = `<span style="color:#b45309; font-weight:700;">+${stn.gross_delay_mins.toFixed(1)}m</span>`;
+          } else {
+            netDisplay = `<span style="color:#dc2626; font-weight:700;">+${stn.net_delay_mins.toFixed(1)}m</span>`;
+          }
+
+          tr.innerHTML = `
+            <td style="text-align:center; font-weight:700; color:#64748b;">${stn.seq}</td>
+            <td>
+              <strong style="color:#0f172a;">${stn.station_name}</strong>
+              <div style="font-size:11px; color:#64748b;">${stn.station_code} &bull; ${stn.note}</div>
+            </td>
+            <td style="font-family:var(--font-mono);">${stn.dist_km.toFixed(1)} km</td>
+            <td style="font-family:var(--font-mono);">${stn.scheduled_arr} IST</td>
+            <td style="font-family:var(--font-mono); color:${stn.gross_delay_mins > 0 ? '#dc2626' : '#64748b'}; font-weight:600;">${stn.gross_delay_mins > 0 ? '+' + stn.gross_delay_mins.toFixed(1) + 'm' : '0.0m'}</td>
+            <td style="font-family:var(--font-mono); color:#166534; font-weight:600;">${stn.absorbed_ea_mins > 0 ? '\u2212' + stn.absorbed_ea_mins.toFixed(1) + 'm' : '0.0m'}</td>
+            <td style="font-family:var(--font-mono);">${netDisplay}</td>
+            <td style="font-family:var(--font-mono); font-weight:700; color:${stn.delay_absorbed ? '#166534' : '#0f172a'};">${stn.predicted_arrival}</td>
+            <td style="text-align:center;">${statusBadge}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+
+        if (badge) {
+          if (allAbsorbed) {
+            badge.style.background = '#dcfce7';
+            badge.style.color = '#166534';
+            badge.textContent = 'ALL DELAYS ABSORBED BY EA BUFFER';
+          } else {
+            badge.style.background = '#fee2e2';
+            badge.style.color = '#dc2626';
+            badge.textContent = 'RESIDUAL DOWNSTREAM DELAY';
+          }
+        }
+      }
+
+      // Initial run: check DB status, load segments and auto-pickup default train
+      checkDbStatus();
+      loadSegments().then(() => {
+        autoPickupTrain(trainSearchInput.value.trim() || '12001');
+      });
+    });
+
+  </script>
+
+</body>
+</html>

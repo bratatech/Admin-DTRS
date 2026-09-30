@@ -1,0 +1,8 @@
+corridor,corridor_slug,total_state_borders_crossed,state_borders_sequence,states_list
+Delhi → Mumbai,DEL-MUM,4,SB-DL -> SB-HR -> SB-RJ -> SB-GJ -> SB-MH,"DL, HR, RJ, GJ, MH"
+Delhi → Howrah,DEL-HWH,4,SB-DL -> SB-UP -> SB-BR -> SB-JH -> SB-WB,"DL, UP, BR, JH, WB"
+Delhi → Chennai,DEL-MAS,6,SB-DL -> SB-MP -> SB-UP -> SB-MP -> SB-MH -> SB-AP -> SB-TN,"DL, MP, UP, MP, MH, AP, TN"
+Mumbai → Chennai,MUM-MAS,3,SB-MH -> SB-KA -> SB-AP -> SB-TN,"MH, KA, AP, TN"
+Mumbai → Howrah,MUM-HWH,4,SB-MH -> SB-CG -> SB-OD -> SB-JH -> SB-WB,"MH, CG, OD, JH, WB"
+Howrah → Chennai,HWH-MAS,3,SB-WB -> SB-OD -> SB-AP -> SB-TN,"WB, OD, AP, TN"
+Howrah → Guwahati,HWH-GHY,3,SB-WB -> SB-BR -> SB-WB -> SB-AS,"WB, BR, WB, AS"
