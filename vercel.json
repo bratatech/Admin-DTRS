@@ -1,0 +1,41 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "services": {
+    "frontend": {
+      "root": "BlackSheep2 - RRU/Frontend",
+      "framework": "nextjs",
+      "bindings": [
+        {
+          "type": "service",
+          "service": "backend",
+          "format": "url",
+          "env": "BACKEND_URL"
+        }
+      ]
+    },
+    "backend": {
+      "root": "BlackSheep2 - RRU/Backend",
+      "runtime": "python",
+      "entrypoint": "AppServer:app"
+    },
+    "spipelines": {
+      "root": "BlackSheep2 - RRU/SPipelines",
+      "runtime": "python",
+      "entrypoint": "AppServer:app"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": {
+        "service": "backend"
+      }
+    },
+    {
+      "source": "/(.*)",
+      "destination": {
+        "service": "frontend"
+      }
+    }
+  ]
+}
