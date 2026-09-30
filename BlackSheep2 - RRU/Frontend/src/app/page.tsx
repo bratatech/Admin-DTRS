@@ -356,7 +356,7 @@ export default function Home() {
 
       // Fetch live telemetry and full TrainInfo metadata concurrently
       const [resLiveTelemetry, resTrainInfo] = await Promise.all([
-        fetch(`/api/live_tracking/auto_fetch_and_freeze?${params.toString()}`),
+        fetch(`/api/railradar/auto_fetch_and_freeze?${params.toString()}`),
         fetch(`/api/train_info?train_no=${encodeURIComponent(trainNo)}`)
       ]);
 

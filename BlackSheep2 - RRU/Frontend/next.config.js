@@ -6,8 +6,8 @@ const nextConfig = {
   async rewrites() {
     return [
       {
-        source: '/api/live_tracking/auto_fetch_and_freeze',
-        destination: `${backendBaseUrl}/api/${['rail', 'radar'].join('')}/auto_fetch_and_freeze`,
+        source: '/api/live_tracking/:path*',
+        destination: `${backendBaseUrl}/api/railradar/:path*`,
       },
       {
         source: '/api/:path*',
