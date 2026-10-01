@@ -35,6 +35,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import create_engine, text
 
+#FASTAPI connection done
 app = FastAPI(title="Indian Railways Segmentation & Compound ETA Engine API")
 
 app.add_middleware(
