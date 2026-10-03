@@ -354,9 +354,20 @@ export default function Home() {
         params.append('multi_station_injections', JSON.stringify(multiInj));
       }
 
+      const storedKey = typeof window !== 'undefined'
+        ? (localStorage.getItem('LIVE_API_KEY') || localStorage.getItem('RAILRADAR_API_KEY') || '')
+        : '';
+      if (storedKey) {
+        params.append('api_key', storedKey);
+      }
+      const liveHeaders: Record<string, string> = {};
+      if (storedKey) {
+        liveHeaders['x-api-key'] = storedKey;
+      }
+
       // Fetch live telemetry and full TrainInfo metadata concurrently
       const [resLiveTelemetry, resTrainInfo] = await Promise.all([
-        fetch(`/api/railradar/auto_fetch_and_freeze?${params.toString()}`),
+        fetch(`/api/railradar/auto_fetch_and_freeze?${params.toString()}`, { headers: liveHeaders }),
         fetch(`/api/train_info?train_no=${encodeURIComponent(trainNo)}`)
       ]);
 

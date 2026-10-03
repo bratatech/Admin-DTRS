@@ -29,7 +29,7 @@ def find_file(rel_path):
 
 import pandas as pd
 import numpy as np
-from fastapi import FastAPI, Query, Body, HTTPException
+from fastapi import FastAPI, Query, Body, HTTPException, Request, Header
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -50,15 +50,61 @@ env_candidates = [
     os.path.join(CURRENT_DIR, '.env'),
     os.path.join(PROJECT_ROOT, '.env'),
     os.path.join(PROJECT_ROOT, 'Backend', '.env'),
+    os.path.join(PROJECT_ROOT, '..', '.env'),
+    os.path.join(PROJECT_ROOT, '..', 'Backend', '.env'),
+    os.path.join(PROJECT_ROOT, 'Frontend', '.env'),
+    os.path.join(PROJECT_ROOT, 'Frontend', '.env.local'),
 ]
 for env_path in env_candidates:
     if os.path.exists(env_path):
-        load_dotenv(env_path)
-        break
+        load_dotenv(env_path, override=False)
+
+def get_configured_api_key_and_source(explicit_key: str = None) -> tuple:
+    """
+    Returns (cleaned_api_key, key_source).
+    Accepts explicit_key from request params/headers, or reads LIVE_API_KEY, RAILRADAR_API_KEY, etc.
+    Reloads .env candidates dynamically so file updates are picked up without restarting server.
+    """
+    if explicit_key and str(explicit_key).strip():
+        k = str(explicit_key).strip().strip('\'"')
+        if k.lower().startswith('bearer '):
+            k = k[7:].strip()
+        if k:
+            return k, "request_parameter_or_header"
+
+    # Reload candidate .env files in case edited during runtime
+    for env_path in env_candidates:
+        if os.path.exists(env_path):
+            try:
+                load_dotenv(env_path, override=True)
+            except Exception:
+                pass
+
+    env_var_options = [
+        ('LIVE_API_KEY', os.getenv('LIVE_API_KEY')),
+        ('RAILRADAR_API_KEY', os.getenv('RAILRADAR_API_KEY')),
+        ('RAIL_RADAR_API_KEY', os.getenv('RAIL_RADAR_API_KEY')),
+        ('API_KEY', os.getenv('API_KEY')),
+        ('RAPIDAPI_KEY', os.getenv('RAPIDAPI_KEY')),
+        ('RAPID_API_KEY', os.getenv('RAPID_API_KEY')),
+    ]
+    for src_name, val in env_var_options:
+        if val and str(val).strip():
+            k = str(val).strip().strip('\'"')
+            if k.lower().startswith('bearer '):
+                k = k[7:].strip()
+            if k:
+                return k, src_name
+
+    return "", "unconfigured"
+
+def get_configured_railradar_url() -> str:
+    url = (os.getenv('RAILRADAR_API_URL') or 'https://api.railradar.in/v1').strip().rstrip('/')
+    return url
 
 NEON_DATABASE_URL = os.getenv('POSTGRESQL') or os.getenv('DATABASE_URL') or os.getenv('NEON_URL')
-RAILRADAR_API_KEY = os.getenv('RAILRADAR_API_KEY', '').strip()
-RAILRADAR_API_URL = os.getenv('RAILRADAR_API_URL', 'https://api.railradar.in/v1').strip().rstrip('/')
+RAILRADAR_API_KEY = get_configured_api_key_and_source()[0]
+RAILRADAR_API_URL = get_configured_railradar_url()
 
 # 7 National Rail Corridors (Golden Quadrilateral & National Trunks)
 NATIONAL_CORRIDORS = {
@@ -609,6 +655,7 @@ def normalize_train_tier(raw_tier: str) -> str:
     return 'T3_EXPRESS_PASSENGER'
 
 @app.get("/api/search")
+@app.get("/search")
 def search_trains(q: str = Query("")):
     q = q.strip().upper()
     if not q:
@@ -838,6 +885,7 @@ def get_train_db_comparison(train_no: str, treta_segment_number: str = None) -> 
     }
 
 @app.get("/api/train_info")
+@app.get("/train_info")
 def get_train_info(train_no: str = Query("12001")):
     """
     Auto-pickup individual train parameters:
@@ -970,6 +1018,7 @@ def get_train_info(train_no: str = Query("12001")):
     }
 
 @app.get("/api/segments")
+@app.get("/segments")
 def get_segments(
     corridor_slug: str = Query(None),
     segment_type: str = Query(None),
@@ -1000,16 +1049,19 @@ def get_segments(
     return enriched
 
 @app.get("/api/corridors")
+@app.get("/corridors")
 def get_corridors():
     """Returns 7 national corridors with state border progressions."""
     return CORRIDOR_STATE_BORDERS
 
 @app.get("/api/state_borders")
+@app.get("/state_borders")
 def get_state_borders():
     """Returns 29 territorial state border clubs with metrics."""
     return STATE_BORDERS
 
 @app.get("/api/predict")
+@app.get("/predict")
 def predict_train(
     train_no: str = "12001",
     train_tier: str = Query(None),
@@ -1753,7 +1805,7 @@ def init_railradar_simulation_table():
 # Initialize table on server start
 init_railradar_simulation_table()
 
-def get_railradar_live_telemetry(train_no: str) -> dict:
+def get_railradar_live_telemetry(train_no: str, explicit_api_key: str = None) -> dict:
     """
     Fetches real-time train tracking telemetry strictly from API endpoints.
     - If upstream RailRadar API returns dynamic live data, that dynamic data is used.
@@ -1780,8 +1832,16 @@ def get_railradar_live_telemetry(train_no: str) -> dict:
     now_ist = datetime.now().strftime("%Y-%m-%dT%H:%M:00+05:30")
     today_str = datetime.now().strftime("%Y-%m-%d")
 
+    # Resolve active API key and configuration dynamically
+    active_api_key, key_source = get_configured_api_key_and_source(explicit_api_key)
+    api_base_url = get_configured_railradar_url()
+
+    last_status = None
+    last_error = None
+    endpoint_queried = None
+
     # 1. Attempt Upstream RailRadar Live API call
-    if RAILRADAR_API_KEY:
+    if active_api_key:
         candidate_numbers = []
         if raw_t:
             candidate_numbers.append(raw_t)
@@ -1790,33 +1850,64 @@ def get_railradar_live_telemetry(train_no: str) -> dict:
         if clean_t and clean_t not in candidate_numbers:
             candidate_numbers.append(clean_t)
 
-        urls_to_try = []
-        for num in candidate_numbers:
-            urls_to_try.extend([
-                f"{RAILRADAR_API_URL}/trains/{num}/live",
-                f"{RAILRADAR_API_URL}/live/{num}",
-                f"{RAILRADAR_API_URL}/live-status/{num}",
-                f"{RAILRADAR_API_URL}/train/{num}/live"
-            ])
+        bases = [api_base_url]
+        if not api_base_url.endswith('/v1'):
+            bases.insert(0, f"{api_base_url}/v1")
+        else:
+            bases.append(api_base_url[:-3])
 
-        for endpoint_url in urls_to_try:
+        urls_to_try = []
+        for b in bases:
+            b_clean = b.rstrip('/')
+            for num in candidate_numbers:
+                urls_to_try.extend([
+                    f"{b_clean}/trains/{num}/live",
+                    f"{b_clean}/live/{num}",
+                    f"{b_clean}/live-status/{num}",
+                    f"{b_clean}/train/{num}/live"
+                ])
+
+        seen_urls = set()
+        unique_urls = []
+        for u in urls_to_try:
+            if u not in seen_urls:
+                seen_urls.add(u)
+                unique_urls.append(u)
+
+        req_headers = {
+            "User-Agent": "BlackSheep-RailRadar/1.0",
+            "Authorization": f"Bearer {active_api_key}",
+            "X-API-KEY": active_api_key,
+            "x-api-key": active_api_key,
+            "Accept": "application/json"
+        }
+
+        for endpoint_url in unique_urls:
             try:
                 import urllib.request
+                import urllib.error
                 import json as _json
-                req = urllib.request.Request(endpoint_url, headers={
-                    "User-Agent": "BlackSheep-RailRadar/1.0",
-                    "Authorization": f"Bearer {RAILRADAR_API_KEY}",
-                    "X-API-KEY": RAILRADAR_API_KEY,
-                    "x-api-key": RAILRADAR_API_KEY,
-                    "Accept": "application/json"
-                })
-                with urllib.request.urlopen(req, timeout=5) as response:
-                    if response.status == 200:
-                        external_data = _json.loads(response.read().decode('utf-8'))
-                        if external_data.get('success') and 'data' in external_data:
-                            data_obj = external_data['data']
-                            data_obj['isLive'] = True
 
+                req = urllib.request.Request(endpoint_url, headers=req_headers)
+                with urllib.request.urlopen(req, timeout=6) as response:
+                    last_status = response.status
+                    if response.status == 200:
+                        endpoint_queried = endpoint_url
+                        raw_bytes = response.read()
+                        external_data = _json.loads(raw_bytes.decode('utf-8'))
+
+                        # Extract data object flexibly
+                        data_obj = None
+                        if isinstance(external_data, dict):
+                            if external_data.get('data') and isinstance(external_data['data'], dict):
+                                data_obj = external_data['data']
+                            elif external_data.get('result') and isinstance(external_data['result'], dict):
+                                data_obj = external_data['result']
+                            elif any(k in external_data for k in ['currentLocation', 'trainNumber', 'train', 'route', 'delayMinutes']):
+                                data_obj = external_data
+
+                        if data_obj:
+                            data_obj['isLive'] = True
                             curr_loc = data_obj.get('currentLocation') or {}
                             route_list = data_obj.get('route') or []
                             train_info = data_obj.get('train') or {}
@@ -1864,14 +1955,31 @@ def get_railradar_live_telemetry(train_no: str) -> dict:
 
                             data_obj['currentLocation'] = curr_loc
 
-                            external_data['meta'] = external_data.get('meta', {})
+                            if not isinstance(external_data, dict):
+                                external_data = {"data": data_obj}
+                            external_data['success'] = True
+                            external_data['data'] = data_obj
+                            external_data['meta'] = external_data.get('meta') or {}
                             external_data['meta']['source'] = 'upstream_live_api'
                             external_data['meta']['api_key_configured'] = True
+                            external_data['meta']['api_key_source'] = key_source
                             external_data['meta']['is_live'] = True
                             external_data['meta']['endpoint_queried'] = endpoint_url
                             return external_data
+            except urllib.error.HTTPError as he:
+                last_status = he.code
+                try:
+                    err_b = he.read().decode('utf-8', errors='ignore')
+                    err_j = _json.loads(err_b)
+                    last_error = err_j.get('error', {}).get('message') or err_j.get('message') or f"HTTP {he.code}"
+                except Exception:
+                    last_error = f"HTTP {he.code}: {he.reason}"
+                print(f"[RailRadar Upstream API HTTP {he.code}] {endpoint_url}: {last_error}")
+                if he.code in [401, 403]:
+                    break
             except Exception as e:
-                pass
+                last_error = str(e)
+                print(f"[RailRadar Upstream Request Error] {endpoint_url}: {e}")
 
     # 2. No dynamic data available from upstream API endpoints:
     # All synthetic safety cover data (fake 14.0 delay, fake 78.5 km/h, fake 60% progress) is DELETED.
@@ -1881,6 +1989,24 @@ def get_railradar_live_telemetry(train_no: str) -> dict:
     dest_code = stops[-1].get('station_code', '') if stops else train_meta.get('destination_station', '')
     dest_name = stops[-1].get('station_name', '') if stops else train_meta.get('destination_station', '')
     total_dist = float(stops[-1].get('dist_km', 0.0)) if stops else 0.0
+
+    masked_key = ""
+    if active_api_key:
+        masked_key = (active_api_key[:4] + "..." + active_api_key[-4:]) if len(active_api_key) >= 8 else "CONFIGURED"
+
+    note_msg = (
+        f"Upstream API returned HTTP {last_status}: {last_error}"
+        if (active_api_key and last_status and last_status != 200)
+        else (
+            f"Upstream API request error: {last_error}"
+            if (active_api_key and last_error)
+            else (
+                "Upstream API key verified, but no live tracking telemetry returned for this train."
+                if active_api_key
+                else "No API key configured (LIVE_API_KEY / RAILRADAR_API_KEY in Backend/.env). Synthetic cover data purged; reporting 0.0 delay, 0.0 speed, 0% progress."
+            )
+        )
+    )
 
     return {
         "success": True,
@@ -1924,9 +2050,14 @@ def get_railradar_live_telemetry(train_no: str) -> dict:
             "traceId": f"offline-{t_key}",
             "timestamp": now_ist,
             "source": "api_no_live_data",
-            "api_key_configured": bool(RAILRADAR_API_KEY),
+            "api_key_configured": bool(active_api_key),
+            "api_key_preview": masked_key if active_api_key else None,
+            "api_key_source": key_source,
+            "upstream_status": last_status,
+            "upstream_error": last_error,
+            "endpoints_queried": unique_urls[:4] if active_api_key else [],
             "is_live": False,
-            "note": "No dynamic live telemetry returned from upstream API endpoints. All safety cover data deleted; displaying 0."
+            "note": note_msg
         }
     }
 
@@ -2154,6 +2285,9 @@ def match_railradar_to_master_db(
         "train_no": t_key,
         "train_name": train_name,
         "railradar_raw": raw_data,
+        "raw_telemetry": raw_data,
+        "meta": telemetry.get("meta", {}),
+        "telemetry": telemetry,
         "matched_combination": {
             "combination_id": matched_pnc.get('combination_id'),
             "train_tier": matched_cases['train_tier'],
@@ -2193,28 +2327,43 @@ def match_railradar_to_master_db(
     }
 
 @app.get("/api/railradar/live")
-def get_railradar_live(train_no: str = Query("12919")):
+@app.get("/railradar/live")
+def get_railradar_live(
+    train_no: str = Query("12919"),
+    api_key: str = Query(None),
+    x_api_key: str = Header(None, alias="x-api-key"),
+    authorization: str = Header(None)
+):
     """
     Returns real-time train tracking telemetry from RailRadar API.
+    Supports query parameter api_key or x-api-key / Authorization Bearer headers.
     """
-    return get_railradar_live_telemetry(train_no)
+    auth_token = authorization.replace("Bearer ", "").replace("bearer ", "").strip() if authorization else None
+    explicit_key = api_key or x_api_key or auth_token
+    return get_railradar_live_telemetry(train_no, explicit_api_key=explicit_key)
 
 @app.api_route("/api/railradar/match", methods=["GET", "POST"])
+@app.api_route("/railradar/match", methods=["GET", "POST"])
 def match_railradar_endpoint(
     payload: dict = Body(None),
     train_no: str = Query(None),
     section_delay_mins: float = Query(0.0),
     treta_segment_number: str = Query(None),
     speedup_recovery_mins: float = Query(0.0),
-    multi_station_injections: str = Query(None)
+    multi_station_injections: str = Query(None),
+    api_key: str = Query(None),
+    x_api_key: str = Header(None, alias="x-api-key"),
+    authorization: str = Header(None)
 ):
     """
     Matches live RailRadar telemetry against combinations in master matrix,
     calculates predictions, logs telemetry into sandbox, and returns frozen state.
     """
+    auth_token = authorization.replace("Bearer ", "").replace("bearer ", "").strip() if authorization else None
+    explicit_key = api_key or x_api_key or auth_token or (payload.get('api_key') if payload else None)
     if not payload or not payload.get('data'):
         target_train = train_no or (payload.get('train_no') if payload else '12919')
-        payload = get_railradar_live_telemetry(target_train)
+        payload = get_railradar_live_telemetry(target_train, explicit_api_key=explicit_key)
     sec_del = float(section_delay_mins or (payload.get('section_delay_mins', 0.0) if payload else 0.0))
     sec_num = treta_segment_number or (payload.get('treta_segment_number') if payload else None)
     speedup = float(speedup_recovery_mins or (payload.get('speedup_recovery_mins', 0.0) if payload else 0.0))
@@ -2228,18 +2377,25 @@ def match_railradar_endpoint(
     )
 
 @app.get("/api/railradar/auto_fetch_and_freeze")
+@app.get("/railradar/auto_fetch_and_freeze")
 def auto_fetch_and_freeze_endpoint(
     train_no: str = Query("12919"),
     section_delay_mins: float = Query(0.0),
     treta_segment_number: str = Query(None),
     speedup_recovery_mins: float = Query(0.0),
-    multi_station_injections: str = Query(None)
+    multi_station_injections: str = Query(None),
+    api_key: str = Query(None),
+    x_api_key: str = Header(None, alias="x-api-key"),
+    authorization: str = Header(None)
 ):
     """
     Convenience endpoint: Fetches live telemetry, matches with MasterPnC combination,
     and returns frozen controls with complete compound prediction calculations.
+    Accepts credentials via query parameter api_key or x-api-key / Authorization Bearer headers.
     """
-    telemetry = get_railradar_live_telemetry(train_no)
+    auth_token = authorization.replace("Bearer ", "").replace("bearer ", "").strip() if authorization else None
+    explicit_key = api_key or x_api_key or auth_token
+    telemetry = get_railradar_live_telemetry(train_no, explicit_api_key=explicit_key)
     return match_railradar_to_master_db(
         telemetry,
         section_delay_mins=section_delay_mins,
@@ -2249,22 +2405,58 @@ def auto_fetch_and_freeze_endpoint(
     )
 
 @app.get("/api/railradar/config")
-def get_railradar_config():
+@app.get("/railradar/config")
+def get_railradar_config(
+    api_key: str = Query(None),
+    x_api_key: str = Header(None, alias="x-api-key"),
+    authorization: str = Header(None)
+):
     """
     Returns RailRadar API credentials status and connection endpoint configuration.
     """
+    auth_token = authorization.replace("Bearer ", "").replace("bearer ", "").strip() if authorization else None
+    explicit_key = api_key or x_api_key or auth_token
+    active_key, src = get_configured_api_key_and_source(explicit_key)
     masked_key = ""
-    if RAILRADAR_API_KEY:
-        masked_key = (RAILRADAR_API_KEY[:4] + "..." + RAILRADAR_API_KEY[-4:]) if len(RAILRADAR_API_KEY) >= 8 else "CONFIGURED"
+    if active_key:
+        masked_key = (active_key[:4] + "..." + active_key[-4:]) if len(active_key) >= 8 else "CONFIGURED"
 
     return {
-        "api_key_configured": bool(RAILRADAR_API_KEY),
+        "api_key_configured": bool(active_key),
+        "api_key_source": src,
         "api_key_preview": masked_key,
-        "api_url": RAILRADAR_API_URL,
-        "mode": "UPSTREAM_LIVE_API" if RAILRADAR_API_KEY else "BUILT_IN_SAMPLE_ENGINE",
+        "api_url": get_configured_railradar_url(),
+        "mode": "UPSTREAM_LIVE_API" if active_key else "BUILT_IN_SAMPLE_ENGINE",
         "sample_train": "12919 (Malwa SF Express with 12m delay & UJN departure)",
-        "env_file_status": "Instance present in .env (RAILRADAR_API_KEY, RAILRADAR_API_URL)"
+        "env_file_status": f"Checked {len(env_candidates)} candidate locations (source: {src})"
     }
+
+@app.post("/api/railradar/config")
+@app.post("/railradar/config")
+def update_railradar_config(payload: dict = Body(...)):
+    """
+    Allows setting or testing an API key directly from the frontend or test clients.
+    Persists to environment and local .env file.
+    """
+    new_key = str(payload.get('api_key') or payload.get('LIVE_API_KEY') or payload.get('RAILRADAR_API_KEY') or '').strip().strip('\'"')
+    if new_key:
+        if new_key.lower().startswith('bearer '):
+            new_key = new_key[7:].strip()
+        os.environ['LIVE_API_KEY'] = new_key
+        os.environ['RAILRADAR_API_KEY'] = new_key
+        try:
+            target_env = os.path.join(CURRENT_DIR, '.env')
+            existing_lines = []
+            if os.path.exists(target_env):
+                with open(target_env, 'r', encoding='utf-8') as f:
+                    existing_lines = [l for l in f.readlines() if not l.startswith(('LIVE_API_KEY=', 'RAILRADAR_API_KEY='))]
+            existing_lines.append(f"LIVE_API_KEY={new_key}\n")
+            existing_lines.append(f"RAILRADAR_API_KEY={new_key}\n")
+            with open(target_env, 'w', encoding='utf-8') as f:
+                f.writelines(existing_lines)
+        except Exception as e:
+            print(f"[RailRadar Config] Could not write to .env: {e}")
+    return get_railradar_config(api_key=new_key)
 
 # -----------------------------------------------------------------------------
 # DATABASE SIMULATION SANDBOX ENDPOINTS (MASTER DB IS STRICTLY UNTOUCHED)
@@ -2272,6 +2464,7 @@ def get_railradar_config():
 
 
 @app.get("/api/simulation/status")
+@app.get("/simulation/status")
 def get_simulation_status():
     return {
         "mode": SIMULATION_STATE['mode'],
@@ -2284,6 +2477,7 @@ def get_simulation_status():
     }
 
 @app.post("/api/simulation/push")
+@app.post("/simulation/push")
 def push_to_simulation_db(payload: dict = Body(...)):
     """
     Pushes proposed delay and cascaded scenario modifications into WIN_SIMULATION.db.
@@ -2400,6 +2594,7 @@ def push_to_simulation_db(payload: dict = Body(...)):
         raise HTTPException(status_code=500, detail=f"Simulation database push error: {str(e)}")
 
 @app.post("/api/simulation/reset")
+@app.post("/simulation/reset")
 def reset_simulation_db():
     """
     Resets the simulation database sandbox by recopying pristine master WIN.db.

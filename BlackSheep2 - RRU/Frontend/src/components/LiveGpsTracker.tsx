@@ -23,6 +23,7 @@ import {
   FastForward,
   PlusCircle,
   X,
+  Key,
 } from 'lucide-react';
 import {
   LiveMatchResponse,
@@ -109,6 +110,84 @@ export const LiveGpsTracker: React.FC<LiveGpsTrackerProps> = ({
   const [selectedCircumstance, setSelectedCircumstance] = useState<string>('WEATHER');
   const [injectionMins, setInjectionMins] = useState<number>(15);
   const [localSpeedup, setLocalSpeedup] = useState<number>(speedupRecoveryMins || 0);
+
+  // API Key management state
+  const [apiKeyModalOpen, setApiKeyModalOpen] = useState<boolean>(false);
+  const [apiKeyInput, setApiKeyInput] = useState<string>('');
+  const [activeKeyPreview, setActiveKeyPreview] = useState<string>('');
+  const [isKeyConfiguredState, setIsKeyConfiguredState] = useState<boolean>(false);
+  const [keySourceState, setKeySourceState] = useState<string>('');
+  const [isSavingKey, setIsSavingKey] = useState<boolean>(false);
+  const [saveStatusMsg, setSaveStatusMsg] = useState<string>('');
+
+  const refreshKeyConfig = async () => {
+    try {
+      const storedKey = typeof window !== 'undefined'
+        ? (localStorage.getItem('LIVE_API_KEY') || localStorage.getItem('RAILRADAR_API_KEY') || '')
+        : '';
+      const url = storedKey ? `/api/railradar/config?api_key=${encodeURIComponent(storedKey)}` : '/api/railradar/config';
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        setIsKeyConfiguredState(Boolean(data.api_key_configured));
+        setActiveKeyPreview(data.api_key_preview || (storedKey ? `${storedKey.slice(0, 4)}...${storedKey.slice(-4)}` : ''));
+        setKeySourceState(data.api_key_source || (storedKey ? 'localStorage' : 'unconfigured'));
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    refreshKeyConfig();
+  }, [liveGpsData]);
+
+  const handleSaveApiKey = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const clean = apiKeyInput.trim();
+    if (!clean) return;
+    setIsSavingKey(true);
+    setSaveStatusMsg('');
+    try {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('LIVE_API_KEY', clean);
+        localStorage.setItem('RAILRADAR_API_KEY', clean);
+      }
+      const res = await fetch('/api/railradar/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ api_key: clean })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setIsKeyConfiguredState(Boolean(data.api_key_configured));
+        setActiveKeyPreview(data.api_key_preview || `${clean.slice(0, 4)}...${clean.slice(-4)}`);
+        setKeySourceState(data.api_key_source || 'LIVE_API_KEY');
+        setSaveStatusMsg('✅ API key verified & saved! Re-querying live GPS telemetry...');
+        setTimeout(() => {
+          setApiKeyModalOpen(false);
+          setSaveStatusMsg('');
+          onTrackTrain(inputTrainNo, localSectionDelay, localSelectedSeg, localSpeedup, multiStationInjections);
+        }, 900);
+      } else {
+        setSaveStatusMsg('Key saved to local browser cache. Re-querying...');
+        setTimeout(() => {
+          setApiKeyModalOpen(false);
+          setSaveStatusMsg('');
+          onTrackTrain(inputTrainNo, localSectionDelay, localSelectedSeg, localSpeedup, multiStationInjections);
+        }, 900);
+      }
+    } catch {
+      setSaveStatusMsg('Saved locally to browser.');
+      setTimeout(() => {
+        setApiKeyModalOpen(false);
+        setSaveStatusMsg('');
+        onTrackTrain(inputTrainNo, localSectionDelay, localSelectedSeg, localSpeedup, multiStationInjections);
+      }, 900);
+    } finally {
+      setIsSavingKey(false);
+    }
+  };
 
   useEffect(() => {
     if (selectedTrainNo) {
@@ -201,6 +280,14 @@ export const LiveGpsTracker: React.FC<LiveGpsTrackerProps> = ({
   };
 
   const raw = (liveGpsData as any)?.raw_telemetry || (liveGpsData as any)?.[['rail', 'radar', '_raw'].join('')];
+  const rawMeta = (liveGpsData as any)?.meta || raw?.meta;
+  const effectiveKeyConfigured = Boolean(rawMeta?.api_key_configured || isKeyConfiguredState);
+  const effectiveKeySource = rawMeta?.api_key_source || keySourceState;
+  const effectiveKeyPreview = rawMeta?.api_key_preview || activeKeyPreview;
+  const upstreamStatus = rawMeta?.upstream_status;
+  const upstreamError = rawMeta?.upstream_error;
+  const note = rawMeta?.note;
+
   const combo = liveGpsData?.matched_combination;
   const curr = raw?.currentLocation;
   const rawProgress = curr?.segmentProgress ?? 0;
@@ -274,9 +361,24 @@ export const LiveGpsTracker: React.FC<LiveGpsTrackerProps> = ({
           </div>
         </div>
 
-        {/* Freeze Controls */}
-        {liveGpsData && (
-          <div className="flex items-center gap-2">
+        {/* Action Controls */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setApiKeyModalOpen(true)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg border transition-all shadow-xs cursor-pointer ${
+              effectiveKeyConfigured
+                ? 'bg-emerald-50 border-emerald-300 text-emerald-900 hover:bg-emerald-100'
+                : 'bg-amber-50 border-amber-300 text-amber-900 hover:bg-amber-100'
+            }`}
+            title="Configure or test RailRadar LIVE_API_KEY"
+          >
+            <Key className={`w-3.5 h-3.5 ${effectiveKeyConfigured ? 'text-emerald-700' : 'text-amber-700'}`} />
+            <span>{effectiveKeyConfigured ? `API KEY: ${effectiveKeyPreview || 'ACTIVE'}` : 'SET API KEY'}</span>
+          </button>
+
+          {/* Freeze Controls */}
+          {liveGpsData && (
             <button
               type="button"
               onClick={onToggleFreeze}
@@ -300,8 +402,8 @@ export const LiveGpsTracker: React.FC<LiveGpsTrackerProps> = ({
                 </>
               )}
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Query Bar */}
@@ -886,15 +988,53 @@ export const LiveGpsTracker: React.FC<LiveGpsTrackerProps> = ({
           {!raw.isLive && (
             <div className="p-3 bg-amber-50 border border-amber-300 rounded-lg text-amber-900 flex items-start gap-2.5">
               <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-              <div>
-                <div className="text-xs font-black uppercase tracking-wider text-amber-800">
-                  No Live GPS Telemetry From Upstream API &bull; All Safety Cover Data Deleted
+              <div className="flex-1">
+                <div className="flex flex-wrap items-center justify-between gap-1.5">
+                  <div className="text-xs font-black uppercase tracking-wider text-amber-800">
+                    {effectiveKeyConfigured
+                      ? `Live GPS API Reached • No Telemetry Stream for Train #${selectedTrainNo}`
+                      : 'No Live GPS Telemetry From Upstream API • All Safety Cover Data Deleted'}
+                  </div>
+                  <span className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold border ${
+                    effectiveKeyConfigured
+                      ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                      : 'bg-amber-200/80 text-amber-900 border-amber-300'
+                  }`}>
+                    {effectiveKeyConfigured
+                      ? `Key Configured (${effectiveKeyPreview || effectiveKeySource})`
+                      : 'API Key Unconfigured'}
+                  </span>
                 </div>
-                <div className="text-xs text-amber-900 font-semibold mt-0.5">
-                  As configured, synthetic cover data has been purged. Displaying 0.0 mins delay, 0.0 km/h speed, and 0% segment progress.
+
+                <div className="text-xs text-amber-900 font-semibold mt-1">
+                  {effectiveKeyConfigured && upstreamError ? (
+                    <span>
+                      Upstream RailRadar API returned: <strong className="font-mono text-rose-700">{upstreamStatus ? `HTTP ${upstreamStatus}: ` : ''}{upstreamError}</strong>
+                    </span>
+                  ) : (
+                    <span>
+                      As configured, synthetic cover data has been purged. Displaying 0.0 mins delay, 0.0 km/h speed, and 0% segment progress.
+                    </span>
+                  )}
                 </div>
-                <div className="text-[11px] text-amber-700 mt-1">
-                  To stream dynamic real-time telemetry, add a valid <code>LIVE_API_KEY</code> in your <code>Backend/.env</code> file.
+
+                <div className="text-[11px] text-amber-700 mt-1 flex flex-wrap items-center gap-1.5">
+                  {effectiveKeyConfigured ? (
+                    <span>
+                      The API endpoint was queried. If this train is not currently running or active, operational baseline 0 values are reported.
+                    </span>
+                  ) : (
+                    <span>
+                      To stream dynamic real-time telemetry, add <code>LIVE_API_KEY</code> in your <code>Backend/.env</code> file, or
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setApiKeyModalOpen(true)}
+                    className="font-bold underline text-indigo-700 hover:text-indigo-900 cursor-pointer ml-1"
+                  >
+                    {effectiveKeyConfigured ? 'Update / Re-test API Key' : 'Enter API Key directly'}
+                  </button>
                 </div>
               </div>
             </div>
@@ -920,6 +1060,93 @@ export const LiveGpsTracker: React.FC<LiveGpsTrackerProps> = ({
             <div className="text-[11px] font-mono text-slate-500 font-bold">
               Production Matrix: ACTIVE (READ-ONLY) &bull; Logged to: Simulation Sandbox
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* API Key Configuration Modal */}
+      {apiKeyModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
+          <div className="w-full max-w-md p-5 bg-white border border-slate-200 rounded-2xl shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2 text-indigo-700 font-bold">
+                <Key className="w-5 h-5 text-indigo-600" />
+                <h3 className="text-base font-extrabold text-slate-900">Upstream Live API Key Config</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setApiKeyModalOpen(false); setSaveStatusMsg(''); }}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="text-xs text-slate-600 space-y-2">
+              <p>
+                Configure your RailRadar API credentials to stream genuine dynamic train telemetry, live delays, and speed.
+              </p>
+              <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 font-mono text-[11px] space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Current Status:</span>
+                  <span className={effectiveKeyConfigured ? 'text-emerald-700 font-bold' : 'text-amber-700 font-bold'}>
+                    {effectiveKeyConfigured ? `CONFIGURED (${effectiveKeySource})` : 'UNCONFIGURED (0.0 BASELINE)'}
+                  </span>
+                </div>
+                {effectiveKeyPreview && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Active Key:</span>
+                    <span className="text-slate-800 font-bold">{effectiveKeyPreview}</span>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Endpoint:</span>
+                  <span className="text-slate-600 truncate max-w-[200px]">https://api.railradar.in/v1</span>
+                </div>
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveApiKey} className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Enter LIVE_API_KEY / RAILRADAR_API_KEY
+                </label>
+                <input
+                  type="text"
+                  value={apiKeyInput}
+                  onChange={(e) => setApiKeyInput(e.target.value)}
+                  placeholder="e.g. rr_live_xxxxxxxxxxxxxxxx"
+                  className="w-full px-3 py-2 text-xs font-mono border rounded-lg border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  You can also add <code>LIVE_API_KEY=...</code> directly inside your <code>Backend/.env</code> file.
+                </p>
+              </div>
+
+              {saveStatusMsg && (
+                <div className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 p-2 rounded-lg">
+                  {saveStatusMsg}
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => { setApiKeyModalOpen(false); setSaveStatusMsg(''); }}
+                  className="px-3.5 py-1.5 text-xs font-bold text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingKey || !apiKeyInput.trim()}
+                  className="px-4 py-1.5 text-xs font-bold text-white bg-indigo-600 rounded-lg shadow-sm hover:bg-indigo-700 active:scale-95 disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {isSavingKey ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Key className="w-3.5 h-3.5" />}
+                  <span>Save &amp; Track Live</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
