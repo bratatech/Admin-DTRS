@@ -21,7 +21,7 @@ flowchart TB
         RAW_META --> M01
         RAW_SCHED --> M01
         M01 --> EA_CALC
-        M01 --> M01B
+        M011 --> M01B
         M01B --> SLOW_ACC
     end
 
